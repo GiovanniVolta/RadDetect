@@ -1,5 +1,6 @@
-# Monalpha
+# Utility
 
-This subfolder holds all the code for the Monalpha detector. The scripts are structured as follows:
+Collection of config files for analysis
 
-- **detection_efficiency** for geometric acceptance of the detector
+- **226_radium** - information about 226 Radium decay
+- **monalpha_configuration** - monalpha detector setting for efficiency calculation
