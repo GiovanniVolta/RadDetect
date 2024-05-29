@@ -1,0 +1,29 @@
+# Default settings for geometrical efficiency
+
+# Environmental settings
+environment:
+  pressure_alpha_pot: 0.1  # mbar - pressure in the chamber
+
+# Sample and detector geometry
+geometry:
+  dist_samp_diode: 12             # mm - distance from sample to diode
+  uncertainty_dist_samp_diode: 2  # mm - uncertainty of distance from sample to diode
+
+# Implantation se
+implantation:
+  impl_depth: 800     # nm - depth of implantation
+  impl_spread: 2.26   # nm - spread of implantation
+  imp_distr: 'point'  # distribution type of implantation
+  act_shape: 'round'  # shape of the activity area
+  act_ext: 5.         # mm - 10./2, lateral extent of activity
+
+# Diode settings
+diode:
+  diode_shape: 'square'    # shape of the diode
+  diode_size: 18           # mm - size of the diode
+  diode_resolution: 40     # keV - energy resolution of the diode
+  diode_dead_layer: 100    # nm - thickness of the diode's dead layer (value found online...)
+
+# Simulation parameters
+simulation:
+  n_ions: 1000000          # Number of ions to simulate

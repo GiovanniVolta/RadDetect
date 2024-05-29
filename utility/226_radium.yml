@@ -1,0 +1,15 @@
+# Energies in MeV of Ra-226 alpha particles
+energies:
+  energy_1_226ra: 4.87
+  energy_2_226ra: 4.601
+
+# Branching ratios for Ra-226 decay modes
+branching_ratios:
+  br_ratio_1: 0.945
+  br_ratio_2: 0.055
+
+# SRIM-calculated energy losses in [MeV/mm] various materials
+srim_losses:
+  srim_loss_226ra_ss: 384.0     # stainless steel
+  srim_loss_226ra_si: 143.7     # silicon
+  srim_loss_226ra_air: 0.7837   # air
