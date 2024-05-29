@@ -6,6 +6,7 @@ Advanced Spectroscopy and Emanation Analysis for Radon Content Characterization 
 ## Installation
 `git clone` this repo and:
 ```
-# at top level of raddetect
-pip install -e ./ --user
+# at top level of raddetect 
+# and for an editable installation
+pip install -e ./
 ```
