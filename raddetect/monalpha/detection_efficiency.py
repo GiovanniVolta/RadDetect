@@ -76,6 +76,9 @@ class MonAlphaDetectorGeometricalEfficiency:
             pos_r = np.sqrt(pos_r2)
             pos_x = pos_r * np.cos(pos_phi)
             pos_y = pos_r * np.sin(pos_phi)
+        elif self.ACT_SHAPE == 'square':
+            pos_x = np.random.uniform(-self.ACT_EXT, self.ACT_EXT, self.N_IONS)
+            pos_y = np.random.uniform(-self.ACT_EXT, self.ACT_EXT, self.N_IONS)
 
         positions = np.stack((pos_x, pos_y, pos_z), axis=1)
         return positions

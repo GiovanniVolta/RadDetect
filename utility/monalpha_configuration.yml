@@ -14,7 +14,7 @@ implantation:
   impl_depth: 800     # nm - depth of implantation
   impl_spread: 2.26   # nm - spread of implantation
   imp_distr: 'point'  # distribution type of implantation
-  act_shape: 'round'  # shape of the activity area
+  act_shape: 'square'  # shape of the activity area
   act_ext: 5.         # mm - 10./2, lateral extent of activity
 
 # Diode settings
