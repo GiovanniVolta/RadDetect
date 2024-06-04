@@ -148,11 +148,21 @@ class MonAlphaDetectorGeometricalEfficiency:
         detection_efficiency = np.sum(bool_diode_hit) / self.N_IONS
         return detection_efficiency
 
+    def calculate_detection_efficiency_stat_uncertainty(self, bool_diode_hit):
+        """
+        Calculates the statistical uncertainty of the 
+        detection efficiency based on the number of hits.
+        """
+        detection_efficiency_stat_uncert = np.sqrt(np.sum(bool_diode_hit)) / self.N_IONS
+        return detection_efficiency_stat_uncert
+
     def run_simulation(self,):
         self.positions = self.generate_positions()
         self.directions = self.generate_directions()
         self.intersections = self.calculate_intersections(self.positions, self.directions)
         self.bool_diode_hit = self.check_diode_hit(self.intersections) 
         self.detection_efficiency = self.calculate_detection_efficiency(self.bool_diode_hit)
+        self.detection_efficiency_stat_uncert = self.calculate_detection_efficiency_stat_uncertainty(self.bool_diode_hit)
         print(f"Detection Efficiency: {self.detection_efficiency * 100:.2f}%")
+        print(f"Statistical Uncertainty: {self.detection_efficiency_stat_uncert * 100:.2f}%")
         print("Simulation complete.")
