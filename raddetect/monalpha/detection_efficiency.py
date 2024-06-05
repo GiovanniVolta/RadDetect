@@ -42,7 +42,7 @@ class MonAlphaDetectorGeometricalEfficiency:
         simulation = detector_settings['simulation']
         
         self.PRESSURE_ALPHA_POT = environment['pressure_alpha_pot']
-        self.DIST_SAMP_DIODE = geometry['dist_samp_diode']
+        self.DIST_SAMP_DIODE = geometry['dist_diode_flange'] - geometry['dist_flange_samp'] + geometry['uncertainty_dist_samp_diode']
         self.ACT_SHAPE = implantation['act_shape']
         self.ACT_EXT = implantation['act_ext']
         self.IMPL_DEPTH = implantation['impl_depth']
@@ -163,6 +163,7 @@ class MonAlphaDetectorGeometricalEfficiency:
         self.bool_diode_hit = self.check_diode_hit(self.intersections) 
         self.detection_efficiency = self.calculate_detection_efficiency(self.bool_diode_hit)
         self.detection_efficiency_stat_uncert = self.calculate_detection_efficiency_stat_uncertainty(self.bool_diode_hit)
+        print(f"Disance Sample - Diode: {self.DIST_SAMP_DIODE} mm")
         print(f"Detection Efficiency: {self.detection_efficiency * 100:.2f}%")
         print(f"Statistical Uncertainty: {self.detection_efficiency_stat_uncert * 100:.2f}%")
         print("Simulation complete.")
