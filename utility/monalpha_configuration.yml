@@ -7,7 +7,7 @@ environment:
 # Sample and detector geometry
 geometry:
   dist_diode_flange: 103.75   # mm - distance from diode to bottom flange (FIXED)
-  dist_flange_samp: 63.5 #mm THIS IS THE ONE THAT CHANGES EACH TIME
+  dist_flange_samp: 62.7  #mm THIS IS THE ONE THAT CHANGES EACH TIME
   uncertainty_dist_samp_diode: 0.3  # mm - uncertainty of distance from sample to diode 
 
 # Implantation se
