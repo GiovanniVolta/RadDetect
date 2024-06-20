@@ -8,6 +8,7 @@ import inspect
 from iminuit import cost, Minuit
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
 class BlumchenAnalysis:
     """
@@ -22,7 +23,7 @@ class BlumchenAnalysis:
         runtime (numpy.ndarray): Runtime data.
     """
     
-    def __init__(self, url, filename):
+    def __init__(self, filename):
         """
         Initializes the BlumchenAnalysis class by retrieving data from the specified URL and filename.
         
@@ -30,35 +31,51 @@ class BlumchenAnalysis:
             url (str): The URL where the ROOT file is located.
             filename (str): The name of the ROOT file to retrieve.
         """
-        self.mca_ch, self.timestamp, self.runtime = self.get_data(url, filename)
+        self.mca_ch, self.timestamp, self.runtime = self.get_data(filename)
 
-    def get_data(self, url, filename):
+    def get_data(self, filename):
         """
-        Retrieves data from a ROOT file located at the specified URL and filename.
-        
+        Retrieves data from a ROOT file located at the specified URL or locally.
+
         Args:
-            url (str): The URL where the ROOT file is located.
             filename (str): The name of the ROOT file to retrieve.
-            
+
         Returns:
             tuple: A tuple containing arrays of MCA channel data, timestamp data, and runtime data.
         """
-        root_file = self._scrape_radon_db(f'{url}/{filename}/')
-        if len(root_file) != 1:
-            raise ValueError(f"Expected 1 element in 'root_file', got {len(root_file)}.")
+        if not filename.endswith('.root'):
+            local_path = filename + '.root'
+        else:
+            local_path = filename
+        url = "https://radon-srv1.mpi-hd.mpg.de/coating_db/resultfiles"
+        
+        # Check if the file exists locally
+        if os.path.exists(local_path):
+            file_to_use = local_path
+            print(f"Using local file: {local_path}")
+        else:
+            # If the file does not exist locally, download it
+            root_file = self._scrape_radon_db(f'{url}/{filename}/')
+            if len(root_file) != 1:
+                raise ValueError(f"Expected 1 element in 'root_file', got {len(root_file)}.")
 
-        with tempfile.NamedTemporaryFile(suffix='.root', delete=False) as tmp_file:
-            tmp_filename = tmp_file.name
-            urllib.request.urlretrieve(root_file[0], tmp_filename)
-
-            with uproot.open(tmp_filename) as _file:
-                tree = _file[_file.keys()[0]]
-                mca_ch = tree["channel"].array().to_numpy()
-                timestamp = tree["timestamp"].array().to_numpy()
-                runtime = tree["runtime"].array().to_numpy()
+            with tempfile.NamedTemporaryFile(suffix='.root', delete=False) as tmp_file:
+                tmp_filename = tmp_file.name
+                urllib.request.urlretrieve(root_file[0], tmp_filename)
+                file_to_use = tmp_filename
                 print(f"Retrieving data from {root_file[0]}")
 
-        os.remove(tmp_filename)
+        # Open the file using uproot
+        with uproot.open(file_to_use) as _file:
+            tree = _file[_file.keys()[0]]
+            mca_ch = tree["channel"].array().to_numpy()
+            timestamp = tree["timestamp"].array().to_numpy()
+            runtime = tree["runtime"].array().to_numpy()
+
+        # If a temporary file was used, remove it
+        if not os.path.exists(local_path):
+            os.remove(tmp_filename)
+
         return mca_ch, timestamp, runtime
 
     def get_mca_histogram(self, MCA_range=[910, 1060], time_range=[240, np.inf], n_channels=None):
@@ -95,7 +112,7 @@ class BlumchenAnalysis:
             n_timestamp (int, optional): The number of timestamps for the histogram. If None, the number is determined automatically.
             
         Returns:
-            tuple: A tuple containing the times, rate, and rate error.
+            tuple: A tuple containing the times, rate, and rate error in seconds and hertz
         """
         # Apply filters based on MCA range and time range
         mask = (self.mca_ch >= MCA_range[0]) & (self.mca_ch <= MCA_range[1]) & \
@@ -157,7 +174,7 @@ class BlumchenAnalysis:
         plt.show()
 
     def get_mca_spectrum_fitting_object(self, model, init, limits=None, fixed=None, 
-                                        MCA_range=[910, 1060], time_range=[240, np.inf], MCA_counts_limit=5, n_channels=None):
+                                        MCA_range=[910, 1060], time_range=[240, np.inf], MCA_counts_limit=5, n_channels=None, prefit=True):
         """
         Prepares a fitting object for the MCA spectrum using the specified model and initial parameters.
         
@@ -182,7 +199,17 @@ class BlumchenAnalysis:
         mask = (data > MCA_counts_limit)
         _data = data[mask]
         _channels = channels[mask]
-        _init = self._prepare_init_for_iminuit(model, init)
+        
+        _init = self._prepare_init_for_fit(model, init)
+        
+        if prefit:
+            print('Prefit with scipy for deriving inital values')
+            _bounds = self._prepare_bounds_for_fit(model, init, fixed)
+            _init, _init_cov = curve_fit(model, _channels, _data, sigma=np.sqrt(_data), absolute_sigma=True, p0=_init, maxfev = 100000, bounds=_bounds)
+            _init_err = np.sqrt(np.diag(_init_cov))
+            for (i,j) in zip(_init, _init_err):
+                print(f'{i:.3f} +/- {j:.3f}')
+        
         cost_function = cost.LeastSquares(_channels, _data, np.sqrt(_data), model)
         m = Minuit(cost_function, *_init)
         if limits is not None:
@@ -194,7 +221,7 @@ class BlumchenAnalysis:
         return m
 
     def get_time_evolution_fitting_object(self, model, init, limits=None, fixed=None, 
-                                        MCA_range=[910, 1060], time_range=[240, np.inf], n_timestamp=None, rate_limit=5):
+                                        MCA_range=[910, 1060], time_range=[240, np.inf], n_timestamp=None, rate_limit=5, prefit=True):
         """
         Prepares a fitting object for the time evolution data using the specified model and initial parameters.
         
@@ -221,8 +248,16 @@ class BlumchenAnalysis:
         _rate = rate[mask]
         _rate_err = rate_err[mask]
         
-        _init = self._prepare_init_for_iminuit(model, init)
+        _init = self._prepare_init_for_fit(model, init)
         
+        if prefit:
+            print('Prefit with scipy for deriving inital values')
+            _bounds = self._prepare_bounds_for_fit(model, init, fixed)
+            _init, _init_cov = curve_fit(model, _times, _rate, sigma=_rate_err, absolute_sigma=True, p0=_init, maxfev = 100000, bounds=_bounds)
+            _init_err = np.sqrt(np.diag(_init_cov))
+            for (i,j) in zip(_init, _init_err):
+                print(f'{i:.3f} +/- {j:.3f}')
+                
         cost_function = cost.LeastSquares(_times, _rate, _rate_err, model)
         m = Minuit(cost_function, *_init)
         if limits is not None:
@@ -240,7 +275,13 @@ class BlumchenAnalysis:
         return [url + node.get('href') for node in soup.find_all('a') if node.get('href').endswith('.root')]
 
     @staticmethod
-    def _prepare_init_for_iminuit(Model, init):
-        parameter_names = inspect.signature(Model).parameters.keys()
-        return [init[p] for p in parameter_names if p != 'x']
+    def _prepare_init_for_fit(Model, init):
+        parameter_names = list(inspect.signature(Model).parameters.keys())[1:]
+        return [init[p] for p in parameter_names]
     
+    @staticmethod
+    def _prepare_bounds_for_fit(model, init, fixed, lower_bound=-np.inf, upper_bound=np.inf, epsilon=1e-9):
+        parameter_names = list(inspect.signature(model).parameters.keys())[1:]  # exclude 'x'
+        bounds = [(init[p] - epsilon, init[p] + epsilon) if fixed.get(p, False) else (lower_bound, upper_bound) for p in parameter_names]
+        lower_bounds, upper_bounds = zip(*bounds)  # Unzip the pairs into two lists
+        return lower_bounds, upper_bounds
