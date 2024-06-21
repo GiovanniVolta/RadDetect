@@ -200,17 +200,16 @@ class BlumchenAnalysis:
         _data = data[mask]
         _channels = channels[mask]
         
-        _init = self._prepare_init_for_fit(model, init)
+        _parameter_names, _init = self._prepare_init_for_fit(model, init)
         
         if prefit:
             print('Prefit with scipy for deriving inital values')
-            _bounds = self._prepare_bounds_for_fit(model, init, fixed)
-            _init, _init_cov = curve_fit(model, _channels, _data, sigma=np.sqrt(_data), absolute_sigma=True, p0=_init, maxfev = 100000, bounds=_bounds)
+            _bounds = self._prepare_bounds_for_fit(model, init, fixed, limits)
+            _init, _init_cov = curve_fit(model.total_model, _channels, _data, sigma=np.sqrt(_data), absolute_sigma=True, p0=_init, maxfev = 500000, bounds=_bounds)
             _init_err = np.sqrt(np.diag(_init_cov))
-            for (i,j) in zip(_init, _init_err):
-                print(f'{i:.3f} +/- {j:.3f}')
+            self.print_table(_parameter_names, _init, _init_err)
         
-        cost_function = cost.LeastSquares(_channels, _data, np.sqrt(_data), model)
+        cost_function = cost.LeastSquares(_channels, _data, np.sqrt(_data), model.total_model)
         m = Minuit(cost_function, *_init)
         if limits is not None:
             for k in limits.keys():
@@ -248,17 +247,16 @@ class BlumchenAnalysis:
         _rate = rate[mask]
         _rate_err = rate_err[mask]
         
-        _init = self._prepare_init_for_fit(model, init)
+        _parameter_names, _init = self._prepare_init_for_fit(model, init)
         
         if prefit:
             print('Prefit with scipy for deriving inital values')
-            _bounds = self._prepare_bounds_for_fit(model, init, fixed)
-            _init, _init_cov = curve_fit(model, _times, _rate, sigma=_rate_err, absolute_sigma=True, p0=_init, maxfev = 100000, bounds=_bounds)
+            _bounds = self._prepare_bounds_for_fit(model, init, fixed, limits)
+            _init, _init_cov = curve_fit(model.total_model, _times, _rate, sigma=_rate_err, absolute_sigma=True, p0=_init, maxfev = 500000, bounds=_bounds)
             _init_err = np.sqrt(np.diag(_init_cov))
-            for (i,j) in zip(_init, _init_err):
-                print(f'{i:.3f} +/- {j:.3f}')
+            self.print_table(_parameter_names, _init, _init_err)
                 
-        cost_function = cost.LeastSquares(_times, _rate, _rate_err, model)
+        cost_function = cost.LeastSquares(_times, _rate, _rate_err, model.total_model)
         m = Minuit(cost_function, *_init)
         if limits is not None:
             for k in limits.keys():
@@ -270,18 +268,54 @@ class BlumchenAnalysis:
 
     @staticmethod
     def _scrape_radon_db(url):
+        # Sends a GET request to the specified URL and parses the content using BeautifulSoup.
         page = requests.get(url).text
         soup = BeautifulSoup(page, 'html.parser')
+        # Returns a list of URLs, appending the href attribute of each <a> tag that ends with '.root' to the base URL.
         return [url + node.get('href') for node in soup.find_all('a') if node.get('href').endswith('.root')]
 
     @staticmethod
     def _prepare_init_for_fit(Model, init):
+        # Retrieves the names of the parameters (excluding 'self') of the Model's constructor.
         parameter_names = list(inspect.signature(Model).parameters.keys())[1:]
-        return [init[p] for p in parameter_names]
+        # Returns a list of initial values for these parameters based on the provided 'init' dictionary.
+        return parameter_names, [init[p] for p in parameter_names]
     
     @staticmethod
-    def _prepare_bounds_for_fit(model, init, fixed, lower_bound=-np.inf, upper_bound=np.inf, epsilon=1e-9):
-        parameter_names = list(inspect.signature(model).parameters.keys())[1:]  # exclude 'x'
-        bounds = [(init[p] - epsilon, init[p] + epsilon) if fixed.get(p, False) else (lower_bound, upper_bound) for p in parameter_names]
+    def _prepare_bounds_for_fit(model, init, fixed, limits, lower_bound=-np.inf, upper_bound=np.inf, epsilon=1e-9):
+        # Retrieves the names of the parameters (excluding 'x') of the model's function.
+        parameter_names = list(inspect.signature(model).parameters.keys())[1:]
+        bounds = []
+        
+        # prepare limits and fixed.
+        if limits == None:
+            _limits = {}
+        else:
+            _limits = limits
+        
+        if fixed == None:
+            _fixed = {}
+        else:
+            _fixed = fixed
+            
+        # Creates bounds for each parameter based on whether it is fixed (using 'epsilon' for tight bounds) 
+        # or if it is specified in limits 
+        # or free (using provided 'lower_bound' and 'upper_bound')
+        for p in parameter_names:
+            if _fixed.get(p, False):
+                bounds.append((init[p] - epsilon, init[p] + epsilon))
+            elif p in _limits.keys():
+                bounds.append((_limits[p][0], _limits[p][1]))
+            else:
+                bounds.append((lower_bound, upper_bound))
+        # Separates the bounds into two lists: one for lower bounds and one for upper bounds.
         lower_bounds, upper_bounds = zip(*bounds)  # Unzip the pairs into two lists
         return lower_bounds, upper_bounds
+    
+    @staticmethod
+    def print_table(_parameter_names, _init, _init_err):
+        print(f'{"| Parameters":12} | {"Value":11} | {"Error":11} |')
+        print('-' * 42)
+        for (l, i, j) in zip(_parameter_names, _init, _init_err):
+            print(f'| {l:10} | {i:11.3f} | {j:11.3f} |')
+        print('-' * 42)
