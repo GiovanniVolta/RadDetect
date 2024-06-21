@@ -123,11 +123,11 @@ class BlumchenAnalysis:
         t_min, t_max = selected_runtime.min(), selected_runtime.max()
         time_bins = np.linspace(t_min, t_max, n_timestamp or int(t_max - t_min))
         data_time_evolution, _ = np.histogram(selected_runtime, bins=time_bins)
-        dt = np.diff(time_bins)
-        times = 0.5 * (time_bins[:-1] + time_bins[1:])
+        dt = np.diff(time_bins) * 60
+        times = 0.5 * (time_bins[:-1] + time_bins[1:]) * 60
         rate = data_time_evolution / dt
         rate_err = np.sqrt(data_time_evolution) / dt
-        return times * 60, rate * 60, rate_err * 60
+        return times, rate, rate_err
 
     def get_base_plot(self, MCA_range=[910, 1060], time_range=[0, np.inf], n_channels=None, n_timestamp=None):
         """
@@ -220,7 +220,7 @@ class BlumchenAnalysis:
         return m
 
     def get_time_evolution_fitting_object(self, model, init, limits=None, fixed=None, 
-                                        MCA_range=[910, 1060], time_range=[240, np.inf], n_timestamp=None, rate_limit=5, prefit=True):
+                                        MCA_range=[910, 1060], time_range=[240, np.inf], n_timestamp=None, rate_limit=0, prefit=True):
         """
         Prepares a fitting object for the time evolution data using the specified model and initial parameters.
         
