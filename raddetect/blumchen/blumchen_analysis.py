@@ -123,6 +123,7 @@ class BlumchenAnalysis:
         t_min, t_max = selected_runtime.min(), selected_runtime.max()
         time_bins = np.linspace(t_min, t_max, n_timestamp or int(t_max - t_min))
         data_time_evolution, _ = np.histogram(selected_runtime, bins=time_bins)
+        # in seconds and hertz
         dt = np.diff(time_bins) * 60
         times = 0.5 * (time_bins[:-1] + time_bins[1:]) * 60
         rate = data_time_evolution / dt
@@ -150,6 +151,7 @@ class BlumchenAnalysis:
         # MCA histogram
         axs[0].plot(channels, data, ds='steps', color='black')
         axs[0].fill_between(channels, data, step='mid', color='black', alpha=0.3)
+        axs[0].axvspan(*MCA_range, color='pink', lw=0, alpha=0.5)
         axs[0].set_yscale('log')
         axs[0].set_xlim(0, 1300)
         axs[0].set_xlabel('MCA channel')
@@ -158,6 +160,7 @@ class BlumchenAnalysis:
         
         # Scatter plot of runtime vs MCA channel
         axs[1].scatter(self.runtime, self.mca_ch, s=3, color='black', alpha=0.3)
+        axs[1].axhspan(*MCA_range, color='pink', lw=0, alpha=0.5)
         axs[1].set_ylabel('MCA channel')
         axs[1].set_xlabel('Runtime [minutes]')
         axs[1].set_ylim(0, 1300)
