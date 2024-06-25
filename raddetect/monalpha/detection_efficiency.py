@@ -161,8 +161,9 @@ class MonAlphaDetectorGeometricalEfficiency:
         self.directions = self.generate_directions()
         self.intersections = self.calculate_intersections(self.positions, self.directions)
         self.bool_diode_hit = self.check_diode_hit(self.intersections) 
-        self.detection_efficiency = self.calculate_detection_efficiency(self.bool_diode_hit)
-        self.detection_efficiency_stat_uncert = self.calculate_detection_efficiency_stat_uncertainty(self.bool_diode_hit)
+        # From 2pi to 4 pi. All the alphas emitted downwards are lost
+        self.detection_efficiency = self.calculate_detection_efficiency(self.bool_diode_hit) / 2
+        self.detection_efficiency_stat_uncert = self.calculate_detection_efficiency_stat_uncertainty(self.bool_diode_hit) / 2
         print(f"Disance Sample - Diode: {self.DIST_SAMP_DIODE} mm")
         print(f"Detection Efficiency: {self.detection_efficiency * 100:.2f}%")
         print(f"Statistical Uncertainty: {self.detection_efficiency_stat_uncert * 100:.2f}%")
