@@ -10,6 +10,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
+import warnings
+
 class BlumchenAnalysis:
     """
     A class for analyzing data from ROOT files, specifically designed for Blumchen analysis.
@@ -18,20 +20,26 @@ class BlumchenAnalysis:
     plot time evolution of the data, and fit the data using specified models.
     
     Attributes:
-        mca_ch (numpy.ndarray): MCA channel data.
+        mca (numpy.ndarray): MCA data.
         timestamp (numpy.ndarray): Timestamp data.
         runtime (numpy.ndarray): Runtime data.
     """
     
-    def __init__(self, filename):
+    def __init__(self, filename, energy_calibration=None):
         """
         Initializes the BlumchenAnalysis class by retrieving data from the specified URL and filename.
         
         Args:
-            url (str): The URL where the ROOT file is located.
-            filename (str): The name of the ROOT file to retrieve.
+            filename (str): The path or the name the ROOT file.
+            energy_calibration (None or list): The energy calibration parameters. It can be either None or a list [q, m] 
+            where q and m are the linear energy calibration parameters.
         """
-        self.mca_ch, self.timestamp, self.runtime = self.get_data(filename)
+        self.energy_calibration = energy_calibration
+        if self.energy_calibration is not None:
+            warnings.warn("energy_calibration is not None. this will affect the MCA range selection. Be caferul!")
+                        
+        self.mca, self.timestamp, self.runtime = self.get_data(filename)
+        
 
     def get_data(self, filename):
         """
@@ -56,7 +64,7 @@ class BlumchenAnalysis:
         else:
             # If the file does not exist locally, download it
             root_file = self._scrape_radon_db(f'{url}/{filename}/')
-            if len(root_file) != 1:
+            if len(root_file) is not 1:
                 raise ValueError(f"Expected 1 element in 'root_file', got {len(root_file)}.")
 
             with tempfile.NamedTemporaryFile(suffix='.root', delete=False) as tmp_file:
@@ -68,7 +76,7 @@ class BlumchenAnalysis:
         # Open the file using uproot
         with uproot.open(file_to_use) as _file:
             tree = _file[_file.keys()[0]]
-            mca_ch = tree["channel"].array().to_numpy()
+            mca = tree["channel"].array().to_numpy()
             timestamp = tree["timestamp"].array().to_numpy()
             runtime = tree["runtime"].array().to_numpy()
 
@@ -76,31 +84,34 @@ class BlumchenAnalysis:
         if not os.path.exists(local_path):
             os.remove(tmp_filename)
 
-        return mca_ch, timestamp, runtime
+        if self.energy_calibration is not None:
+            mca = (mca - self.energy_calibration[1])/self.energy_calibration[0]
+        
+        return mca, timestamp, runtime
 
-    def get_mca_histogram(self, MCA_range=[910, 1060], time_range=[240, np.inf], n_channels=None):
+    def get_mca_histogram(self, MCA_range=[910, 1060], time_range=[240, np.inf], n_mca=None):
         """
         Generates a histogram of MCA channel data within a specified range and time range.
         
         Args:
             MCA_range (list, optional): The range of MCA channels to include. Defaults to [910, 1060].
             time_range (list, optional): The range of time to include, in minutes. Defaults to [240, np.inf].
-            n_channels (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
+            n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
             
         Returns:
             tuple: A tuple containing the histogram data and the channel bins.
-        """
-        # Apply filters based on MCA range and time range
-        mask = (self.mca_ch >= MCA_range[0]) & (self.mca_ch <= MCA_range[1]) & \
+        """            
+        # Apply filters based on MCA range and time range            
+        mask = (self.mca >= MCA_range[0]) & (self.mca <= MCA_range[1]) & \
             (self.runtime > time_range[0]) & (self.runtime < time_range[1])
-        selected_mca_ch = self.mca_ch[mask]
+        selected_mca = self.mca[mask]
 
         # Generate histogram
-        ch_min, ch_max = selected_mca_ch.min(), selected_mca_ch.max()
-        channel_bins = np.linspace(ch_min, ch_max, n_channels or int(ch_max - ch_min))
-        data, channels = np.histogram(selected_mca_ch, bins=channel_bins)
-        channels = 0.5 * (channel_bins[1:] + channel_bins[:-1])
-        return data, channels
+        mca_min, mca_max = selected_mca.min(), selected_mca.max()
+        mca_bins = np.linspace(mca_min, mca_max, n_mca or int(mca_max - mca_min))
+        data, _ = np.histogram(selected_mca, bins=mca_bins)
+        mcas = 0.5 * (mca_bins[1:] + mca_bins[:-1])
+        return data, mcas
 
     def get_time_evolution(self, MCA_range=[910, 1060], time_range=[240, np.inf], n_timestamp=None):
         """
@@ -115,7 +126,7 @@ class BlumchenAnalysis:
             tuple: A tuple containing the times, rate, and rate error in seconds and hertz
         """
         # Apply filters based on MCA range and time range
-        mask = (self.mca_ch >= MCA_range[0]) & (self.mca_ch <= MCA_range[1]) & \
+        mask = (self.mca >= MCA_range[0]) & (self.mca <= MCA_range[1]) & \
             (self.runtime > time_range[0]) & (self.runtime < time_range[1])
         selected_runtime = self.runtime[mask]
 
@@ -130,54 +141,66 @@ class BlumchenAnalysis:
         rate_err = np.sqrt(data_time_evolution) / dt
         return times, rate, rate_err
 
-    def get_base_plot(self, MCA_range=[910, 1060], time_range=[0, np.inf], n_channels=None, n_timestamp=None):
+    def get_base_plot(self, MCA_range=[910, 1060], time_range=[0, np.inf], n_mca=None, n_timestamp=None):
         """
         Generates and displays base plots for the MCA channel data, including a histogram, scatter plot, and error bar plot.
         
         Args:
             MCA_range (list, optional): The range of MCA channels for the time evolution plot. Defaults to [910, 1060].
             time_range (list, optional): The range of time for the plots, in minutes. Defaults to [0, np.inf].
-            n_channels (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
+            n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
             n_timestamp (int, optional): The number of timestamps for the time evolution plot. If None, the number is determined automatically.
         """
-        # Generate data for plots
-        data, channels = self.get_mca_histogram(MCA_range=[0, 1300], time_range=time_range, n_channels=n_channels)
-        times, rate, rate_err = self.get_time_evolution(MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp)
-        
         # Plotting
         fig, axs = plt.subplots(1, 3, figsize=(18, 5), dpi=150)
         axs = axs.flatten()
         
+        # Plot property that depends on the energy_calibration
+        if self.energy_calibration is not None:
+            label = f'Time evolution in {MCA_range} keV'
+            axs[1].set_ylabel('Energy [keV]')
+            axs[0].set_xlabel('Energy [keV]')
+            _MCA_range = [(0 - self.energy_calibration[1])/self.energy_calibration[0], 
+                        (1300 - self.energy_calibration[1])/self.energy_calibration[0]
+                        ]
+        else:
+            label = f'Time evolution in {MCA_range} MCA ch'
+            axs[1].set_ylabel('MCA channel')
+            axs[0].set_xlabel('MCA channel')
+            _MCA_range = [0, 1300]    
+        
+        data, mcas = self.get_mca_histogram(MCA_range=_MCA_range, time_range=time_range, n_mca=n_mca)
+        times, rate, rate_err = self.get_time_evolution(MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp)
+            
         # MCA histogram
-        axs[0].plot(channels, data, ds='steps', color='black')
-        axs[0].fill_between(channels, data, step='mid', color='black', alpha=0.3)
+        axs[0].plot(mcas, data, ds='steps', color='black')
+        axs[0].fill_between(mcas, data, step='mid', color='black', alpha=0.3)
         axs[0].axvspan(*MCA_range, color='pink', lw=0, alpha=0.5)
         axs[0].set_yscale('log')
-        axs[0].set_xlim(0, 1300)
-        axs[0].set_xlabel('MCA channel')
+        axs[0].set_xlim(_MCA_range)                        
         axs[0].set_ylabel('Counts')
         axs[0].grid()
         
         # Scatter plot of runtime vs MCA channel
-        axs[1].scatter(self.runtime, self.mca_ch, s=3, color='black', alpha=0.3)
-        axs[1].axhspan(*MCA_range, color='pink', lw=0, alpha=0.5)
-        axs[1].set_ylabel('MCA channel')
+        axs[1].scatter(self.runtime, self.mca, s=3, color='black', alpha=0.3)
+        axs[1].axhspan(*MCA_range, color='pink', lw=0, alpha=0.5)            
         axs[1].set_xlabel('Runtime [minutes]')
-        axs[1].set_ylim(0, 1300)
+        axs[1].set_ylim(_MCA_range)    
         axs[1].grid()
         
-        # Time evolution error bar plot
-        axs[2].errorbar(times / 60 / 60 / 24, rate, yerr=rate_err, lw=0, color='black', marker='o', ms=2, elinewidth=1, label=f'Time evolution in {MCA_range} MCA ch')
+        # Time evolution error bar plot           
+        axs[2].errorbar(times / 60 / 60 / 24, rate, yerr=rate_err, lw=0, color='black', marker='o', ms=2, elinewidth=1, label=label)
         axs[2].set_xlabel('Times [day]')
         axs[2].set_ylabel('Rate [Hz]')
         axs[2].grid()
         axs[2].legend()
-
+        
         plt.tight_layout()
         plt.show()
 
     def get_mca_spectrum_fitting_object(self, model, init, limits=None, fixed=None, 
-                                        MCA_range=[910, 1060], time_range=[240, np.inf], MCA_counts_limit=5, n_channels=None, prefit=True):
+                                        MCA_range=[910, 1060], time_range=[240, np.inf], 
+                                        MCA_counts_limit=5, n_mca=None, prefit=True):
         """
         Prepares a fitting object for the MCA spectrum using the specified model and initial parameters.
         
@@ -192,27 +215,28 @@ class BlumchenAnalysis:
             MCA_range (list, optional): The range of MCA channels to include in the fit. Defaults to [910, 1060].
             time_range (list, optional): The range of time to include, in minutes. Defaults to [240, np.inf].
             MCA_counts_limit (int, optional): The minimum number of counts required for a channel to be included in the fit. Defaults to 5.
-            n_channels (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
+            n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
             
         Returns:
             iminuit.Minuit: A Minuit object configured for fitting the specified model to the MCA spectrum data.
         """
-        data, channels = self.get_mca_histogram(MCA_range=MCA_range, time_range=time_range, n_channels=n_channels)
+        data, mcas = self.get_mca_histogram(MCA_range=MCA_range, time_range=time_range, n_mca=n_mca)
         
         mask = (data > MCA_counts_limit)
         _data = data[mask]
-        _channels = channels[mask]
+        _mcas = mcas[mask]
         
         _parameter_names, _init = self._prepare_init_for_fit(model, init)
         
         if prefit:
             print('Prefit with scipy for deriving inital values')
             _bounds = self._prepare_bounds_for_fit(model, init, fixed, limits)
-            _init, _init_cov = curve_fit(model.total_model, _channels, _data, sigma=np.sqrt(_data), absolute_sigma=True, p0=_init, maxfev = 500000, bounds=_bounds)
+            _init, _init_cov = curve_fit(model.total_model, _mcas, _data, sigma=np.sqrt(_data), 
+                                        absolute_sigma=True, p0=_init, maxfev = 500000, bounds=_bounds)
             _init_err = np.sqrt(np.diag(_init_cov))
             self.print_table(_parameter_names, _init, _init_err)
         
-        cost_function = cost.LeastSquares(_channels, _data, np.sqrt(_data), model.total_model)
+        cost_function = cost.LeastSquares(_mcas, _data, np.sqrt(_data), model.total_model)
         m = Minuit(cost_function, *_init)
         if limits is not None:
             for k in limits.keys():
