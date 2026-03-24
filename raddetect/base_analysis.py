@@ -1,22 +1,36 @@
+import requests
+from bs4 import BeautifulSoup
+import urllib.request
+import uproot
+import tempfile
+import os
+import inspect
+from iminuit import cost, Minuit
 import numpy as np
-from ..base_analysis import RadonAnalysis
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
-class MonalphaAnalysis(RadonAnalysis):
+import warnings
+
+class RadonAnalysis:
     """
-    A class for analyzing data from ROOT files, specifically designed for Monalpha analysis.
+    A base class for analyzing data from ROOT files.
     
-    This class provides methods to retrieve data from a specified URL, generate histograms of MCA channel data,
+    This class provides methods to retrieve data from a specified URL or local file, generate histograms of MCA channel data,
     plot time evolution of the data, and fit the data using specified models.
     
     Attributes:
-        mca_ch (numpy.ndarray): MCA channel data.
+        mca (numpy.ndarray): MCA channel data.
         timestamp (numpy.ndarray): Timestamp data.
         runtime (numpy.ndarray): Runtime data.
     """
     
+    DEFAULT_MCA_RANGE = [0, 1300]
+    DEFAULT_TIME_RANGE = [0, np.inf]
+    
     def __init__(self, filename, energy_calibration=None):
         """
-        Initializes the MonalphaAnalysis class by retrieving data from the specified file path.
+        Initializes the RadonAnalysis class by retrieving data from the specified file path or URL.
         
         Args:
             filename (str): The path or the name the ROOT file.
@@ -77,18 +91,21 @@ class MonalphaAnalysis(RadonAnalysis):
         
         return mca, timestamp, runtime
 
-    def get_mca_histogram(self, MCA_range=[600, 715], time_range=[0, np.inf], n_mca=None):
+    def get_mca_histogram(self, MCA_range=None, time_range=None, n_mca=None):
         """
         Generates a histogram of MCA channel data within a specified range and time range.
         
         Args:
-            MCA_range (list, optional): The range of MCA channels to include. Defaults to [910, 1060].
-            time_range (list, optional): The range of time to include, in minutes. Defaults to [240, np.inf].
+            MCA_range (list, optional): The range of MCA channels to include. Defaults to class DEFAULT_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes. Defaults to class DEFAULT_TIME_RANGE.
             n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
             
         Returns:
             tuple: A tuple containing the histogram data and the channel bins.
         """
+        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
+        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
+        
         # Apply filters based on MCA range and time range
         mask = (self.mca >= MCA_range[0]) & (self.mca <= MCA_range[1]) & \
             (self.runtime > time_range[0]) & (self.runtime < time_range[1])
@@ -101,18 +118,21 @@ class MonalphaAnalysis(RadonAnalysis):
         mcas = 0.5 * (mca_bins[1:] + mca_bins[:-1])
         return data, mcas
 
-    def get_time_evolution(self, MCA_range=[600, 715], time_range=[0, np.inf], n_timestamp=None):
+    def get_time_evolution(self, MCA_range=None, time_range=None, n_timestamp=None):
         """
         Generates data for the time evolution of the MCA channel data within a specified range and time range.
         
         Args:
-            MCA_range (list, optional): The range of MCA channels to include. Defaults to [910, 1060].
-            time_range (list, optional): The range of time to include, in minutes. Defaults to [240, np.inf].
+            MCA_range (list, optional): The range of MCA channels to include. Defaults to class DEFAULT_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes. Defaults to class DEFAULT_TIME_RANGE.
             n_timestamp (int, optional): The number of timestamps for the histogram. If None, the number is determined automatically.
             
         Returns:
             tuple: A tuple containing the times, rate, and rate error in seconds and hertz
         """
+        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
+        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
+        
         # Apply filters based on MCA range and time range
         mask = (self.mca >= MCA_range[0]) & (self.mca <= MCA_range[1]) & \
             (self.runtime > time_range[0]) & (self.runtime < time_range[1])
@@ -129,16 +149,19 @@ class MonalphaAnalysis(RadonAnalysis):
         rate_err = np.sqrt(data_time_evolution) / dt
         return times, rate, rate_err
 
-    def get_base_plot(self, MCA_range=[600, 715], time_range=[0, np.inf], n_mca=None, n_timestamp=None):
+    def get_base_plot(self, MCA_range=None, time_range=None, n_mca=None, n_timestamp=None):
         """
         Generates and displays base plots for the MCA channel data, including a histogram, scatter plot, and error bar plot.
         
         Args:
-            MCA_range (list, optional): The range of MCA channels for the time evolution plot. Defaults to [910, 1060].
-            time_range (list, optional): The range of time for the plots, in minutes. Defaults to [0, np.inf].
+            MCA_range (list, optional): The range of MCA channels for the time evolution plot. Defaults to class DEFAULT_MCA_RANGE.
+            time_range (list, optional): The range of time for the plots, in minutes. Defaults to class DEFAULT_TIME_RANGE.
             n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
             n_timestamp (int, optional): The number of timestamps for the time evolution plot. If None, the number is determined automatically.
         """
+        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
+        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
+        
         # Plotting
         fig, axs = plt.subplots(1, 3, figsize=(18, 5), dpi=150)
         axs = axs.flatten()
@@ -187,27 +210,11 @@ class MonalphaAnalysis(RadonAnalysis):
         plt.show()
 
     def get_mca_spectrum_fitting_object(self, model, init, limits=None, fixed=None, 
-                                        MCA_range=[600, 715], time_range=[0, np.inf], 
+                                        MCA_range=None, time_range=None, 
                                         MCA_counts_limit=5, n_mca=None, prefit=True):
-        """
-        Prepares a fitting object for the MCA spectrum using the specified model and initial parameters.
+        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
+        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
         
-        This method filters the MCA channel data based on the specified MCA range, time range, and counts limit,
-        and then prepares a Minuit object for fitting the filtered data to the specified model.
-        
-        Args:
-            model (callable): The model function to fit the data to. Must be compatible with iminuit.
-            init (dict): Initial parameter values for the fitting model.
-            limits (dict, optional): Parameter limits for the fitting model. Defaults to None.
-            fixed (dict, optional): Parameters to be held fixed during the fit. Defaults to None.
-            MCA_range (list, optional): The range of MCA channels to include in the fit. Defaults to [910, 1060].
-            time_range (list, optional): The range of time to include, in minutes. Defaults to [240, np.inf].
-            MCA_counts_limit (int, optional): The minimum number of counts required for a channel to be included in the fit. Defaults to 5.
-            n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
-            
-        Returns:
-            iminuit.Minuit: A Minuit object configured for fitting the specified model to the MCA spectrum data.
-        """
         data, mcas = self.get_mca_histogram(MCA_range=MCA_range, time_range=time_range, n_mca=n_mca)
         
         mask = (data > MCA_counts_limit)
@@ -235,26 +242,10 @@ class MonalphaAnalysis(RadonAnalysis):
         return m
 
     def get_time_evolution_fitting_object(self, model, init, limits=None, fixed=None, 
-                                        MCA_range=[600, 715], time_range=[0, np.inf], n_timestamp=None, rate_limit=0, prefit=True):
-        """
-        Prepares a fitting object for the time evolution data using the specified model and initial parameters.
+                                        MCA_range=None, time_range=None, n_timestamp=None, rate_limit=0, prefit=True):
+        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
+        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
         
-        This method filters the time evolution data based on the specified MCA range, time range, and rate limit,
-        and then prepares a Minuit object for fitting the filtered data to the specified model.
-        
-        Args:
-            model (callable): The model function to fit the data to. Must be compatible with iminuit.
-            init (dict): Initial parameter values for the fitting model.
-            limits (dict, optional): Parameter limits for the fitting model. Defaults to None.
-            fixed (dict, optional): Parameters to be held fixed during the fit. Defaults to None.
-            MCA_range (list, optional): The range of MCA channels to include in the fit. Defaults to [910, 1060].
-            time_range (list, optional): The range of time to include, in minutes. Defaults to [240, np.inf].
-            n_timestamp (int, optional): The number of timestamps for the histogram. If None, the number is determined automatically.
-            rate_limit (int, optional): The minimum rate required for a time point to be included in the fit. Defaults to 5.
-            
-        Returns:
-            iminuit.Minuit: A Minuit object configured for fitting the specified model to the time evolution data.
-        """
         times, rate, rate_err = self.get_time_evolution(MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp)
         
         mask = (rate > rate_limit)

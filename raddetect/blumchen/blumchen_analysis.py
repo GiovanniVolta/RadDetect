@@ -1,18 +1,7 @@
-import requests
-from bs4 import BeautifulSoup
-import urllib.request
-import uproot
-import tempfile
-import os
-import inspect
-from iminuit import cost, Minuit
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
+from ..base_analysis import RadonAnalysis
 
-import warnings
-
-class BlumchenAnalysis:
+class BlumchenAnalysis(RadonAnalysis):
     """
     A class for analyzing data from ROOT files, specifically designed for Blumchen analysis.
     
@@ -36,7 +25,7 @@ class BlumchenAnalysis:
         """
         self.energy_calibration = energy_calibration
         if self.energy_calibration is not None:
-            warnings.warn("energy_calibration is not None. this will affect the MCA range selection. Be caferul!")
+            warnings.warn("energy_calibration is not None. this will affect the MCA range selection. Be careful!")
                         
         self.mca, self.timestamp, self.runtime = self.get_data(filename)
         
@@ -64,7 +53,7 @@ class BlumchenAnalysis:
         else:
             # If the file does not exist locally, download it
             root_file = self._scrape_radon_db(f'{url}/{filename}/')
-            if len(root_file) is not 1:
+            if len(root_file) != 1:
                 raise ValueError(f"Expected 1 element in 'root_file', got {len(root_file)}.")
 
             with tempfile.NamedTemporaryFile(suffix='.root', delete=False) as tmp_file:
@@ -315,15 +304,8 @@ class BlumchenAnalysis:
         bounds = []
         
         # prepare limits and fixed.
-        if limits == None:
-            _limits = {}
-        else:
-            _limits = limits
-        
-        if fixed == None:
-            _fixed = {}
-        else:
-            _fixed = fixed
+        _limits = limits or {}
+        _fixed = fixed or {}
             
         # Creates bounds for each parameter based on whether it is fixed (using 'epsilon' for tight bounds) 
         # or if it is specified in limits 
