@@ -1,7 +1,12 @@
-_version__ = "0.0.1"
+__version__ = "0.1.0"
 
-from . import monalpha
-from .monalpha import *
+# Explicitly import the submodules (using the 'as' alias to satisfy Ruff F401)
+from . import blumchen as blumchen
+from . import monalpha as monalpha
 
-from . import blumchen
-from .blumchen import *
+
+# Define __all__ to control what 'from raddetect import *' does
+__all__ = [
+    "blumchen",
+    "monalpha",
+]
