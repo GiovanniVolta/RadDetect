@@ -31,3 +31,26 @@ For the `ruff`:
 - to format all files: `ruff format .`
 - to check if files would be formatted: `ruff format --check .`
 - speed combo `ruff check --fix && ruff format`
+
+## Development & Contribution Notes
+
+To maintain a clean repository, we follow a strict policy regarding **Jupyter Notebooks** and **ROOT data files**.
+
+### 1. Jupyter Notebooks
+By default, changes to `.ipynb` files are **ignored** to prevent Git history bloat caused by cell metadata and execution outputs.
+* **To contribute a new tutorial or update an existing one:** You must manually "force-add" the file.
+* **Requirement:** Please **Clear All Outputs** (`Cell > All Output > Clear`) before staging to keep the diff readable.
+
+```bash
+git add -f tutorials/your_notebook.ipynb
+```
+
+### 2.Test Data (tests/data/)
+
+Large binary `.root` files are ignored by default to keep the repository size manageable.
+
+To add or update reference datasets for tests:
+
+```bash
+git add -f tests/data/your_data.root
+```

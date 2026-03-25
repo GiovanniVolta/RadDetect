@@ -79,6 +79,7 @@ target/
 .ipynb_checkpoints
 # Ignore all Jupyter Notebooks in the tutorials folder
 tutorials/*.ipynb
+*.ipynb
 
 # IPython
 profile_default/
