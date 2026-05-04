@@ -1,5 +1,3 @@
-from . import detection_efficiency
+from . import detection_efficiency, monalpha_analysis
 from .detection_efficiency import *
-
-from . import monalpha_analysis
 from .monalpha_analysis import *

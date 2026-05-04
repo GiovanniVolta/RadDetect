@@ -1,0 +1,49 @@
+# Specifies the build backend and its requirements for packaging
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Tell hatchling where your code is (since you don't use 'src')
+[tool.hatch.build.targets.wheel]
+packages = ["raddetect"]
+
+# Core metadata and dependencies for the raddetect package
+[project]
+name = "raddetect"
+dynamic = ["version"]
+description = "Advanced Spectroscopy and Emanation Analysis for Radon Content Characterization in Diverse Environments"
+authors = [
+    { name = "MPIK", email = "your.email@example.com" }
+]
+requires-python = ">=3.10"
+keywords = ["Radon"]
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "pyyaml"
+]
+
+[project.urls]
+Homepage = "https://github.com/GiovanniVolta/RadDetect?tab=readme-ov-file"
+
+# Tell hatchling to read the version from __init__.py
+[tool.hatch.version]
+path = "raddetect/__init__.py"
+
+# Configuration for the Ruff linter and formatter tools
+[tool.ruff]
+# Set the maximum line length
+line-length = 88
+# Target your specific Python version (adjust if you use 3.11 or 3.12)
+target-version = "py310"
+
+[tool.ruff.lint]
+# Enable standard errors (E), warnings (F), and import sorting (I)
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+# Standardize on double quotes and space indentation
+quote-style = "double"
+indent-style = "space"
