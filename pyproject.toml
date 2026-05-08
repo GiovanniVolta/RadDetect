@@ -22,11 +22,18 @@ dependencies = [
     "scipy",
     "matplotlib",
     "pandas",
-    "pyyaml"
+    "pyyaml",
+    "uproot",
+    "requests",
+    "beautifulsoup4",
+    "iminuit"
 ]
 
 [project.urls]
 Homepage = "https://github.com/GiovanniVolta/RadDetect?tab=readme-ov-file"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "docformatter"]
 
 # Tell hatchling to read the version from __init__.py
 [tool.hatch.version]
@@ -47,3 +54,9 @@ select = ["E", "F", "I"]
 # Standardize on double quotes and space indentation
 quote-style = "double"
 indent-style = "space"
+
+[tool.docformatter]
+wrap-summaries = 88
+wrap-descriptions = 88
+recursive = true
+in-place = true

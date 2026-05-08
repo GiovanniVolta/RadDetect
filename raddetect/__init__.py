@@ -4,7 +4,6 @@ __version__ = "0.1.0"
 from . import blumchen as blumchen
 from . import monalpha as monalpha
 
-
 # Define __all__ to control what 'from raddetect import *' does
 __all__ = [
     "blumchen",

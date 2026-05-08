@@ -2,11 +2,10 @@ import numpy as np
 
 
 class MonAlphaDetectorGeometricalEfficiency:
-    """
-    A class to simulate the geometrical efficiency of a monolithic alpha detector.
-    This class simulates the detection efficiency of alpha particles emitted from a radioactive source,
-    considering the geometrical setup of the source and the detector, as well as the physical properties
-    of the emitted alpha particles.
+    """A class to simulate the geometrical efficiency of a monolithic alpha detector.
+    This class simulates the detection efficiency of alpha particles emitted from a
+    radioactive source, considering the geometrical setup of the source and the
+    detector, as well as the physical properties of the emitted alpha particles.
 
     Attributes:
         PRESSURE_ALPHA_POT (float): Pressure in the chamber.
@@ -31,10 +30,8 @@ class MonAlphaDetectorGeometricalEfficiency:
     """
 
     def __init__(self, detector_settings):
-        """
-        Initializes the detector with configurations for ions and detector settings.
-        """
-
+        """Initializes the detector with configurations for ions and detector
+        settings."""
         # Assign detector settings
         environment = detector_settings["environment"]
         geometry = detector_settings["geometry"]
@@ -60,10 +57,8 @@ class MonAlphaDetectorGeometricalEfficiency:
         self.N_IONS = simulation["n_ions"]
 
     def generate_positions(self):
-        """
-        Generates the initial positions of the alpha particles based on the implantation depth and distribution.
-        """
-
+        """Generates the initial positions of the alpha particles based on the
+        implantation depth and distribution."""
         # Generate z positions based on the implantation distribution
         if self.IMP_DISTR == "point":
             pos_z = (
@@ -97,10 +92,8 @@ class MonAlphaDetectorGeometricalEfficiency:
         return positions
 
     def generate_directions(self):
-        """
-        Generates the initial directions of the alpha particles assuming isotropic emission.
-        """
-
+        """Generates the initial directions of the alpha particles assuming isotropic
+        emission."""
         # Generate random isotropic directions
         phis = np.random.uniform(0, 2 * np.pi, self.N_IONS)
         thetas = np.arccos(np.random.uniform(0, 1, self.N_IONS))
@@ -128,8 +121,8 @@ class MonAlphaDetectorGeometricalEfficiency:
         return solutions
 
     def calculate_intersections(self, positions, directions):
-        """
-        Calculates the intersections of the alpha particles with the detection plane.
+        """Calculates the intersections of the alpha particles with the detection plane.
+
         Look if the intersection point is inside the diode
         """
         # Ceiling plane center of the plane is cener of diode
@@ -156,10 +149,8 @@ class MonAlphaDetectorGeometricalEfficiency:
         return intersections
 
     def check_diode_hit(self, intersections):
-        """
-        Checks if the alpha particles hit the diode based on the diode shape and size.
-        """
-
+        """Checks if the alpha particles hit the diode based on the diode shape and
+        size."""
         if self.DIODE_SHAPE == "square":
             bool_diode_hit = np.logical_and(
                 np.less(np.abs(intersections[:, 0]), self.DIODE_SIZE / 2.0),
@@ -173,17 +164,13 @@ class MonAlphaDetectorGeometricalEfficiency:
         return bool_diode_hit
 
     def calculate_detection_efficiency(self, bool_diode_hit):
-        """
-        Calculates the detection efficiency based on the number of hits.
-        """
+        """Calculates the detection efficiency based on the number of hits."""
         detection_efficiency = np.sum(bool_diode_hit) / self.N_IONS
         return detection_efficiency
 
     def calculate_detection_efficiency_stat_uncertainty(self, bool_diode_hit):
-        """
-        Calculates the statistical uncertainty of the
-        detection efficiency based on the number of hits.
-        """
+        """Calculates the statistical uncertainty of the detection efficiency based on
+        the number of hits."""
         detection_efficiency_stat_uncert = np.sqrt(np.sum(bool_diode_hit)) / self.N_IONS
         return detection_efficiency_stat_uncert
 

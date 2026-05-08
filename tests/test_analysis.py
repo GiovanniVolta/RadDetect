@@ -8,6 +8,7 @@ TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 # Using one of the test files for all tests, as requested
 TEST_DATA_FILE = os.path.join(TEST_DATA_DIR, "rn13032026.root")
 
+
 def test_radon_analysis_initialization():
     # Initialize the base class with an actual local test file
     analysis = RadonAnalysis(TEST_DATA_FILE)
@@ -40,10 +41,11 @@ def test_monalpha_initialization():
 def test_blumchen_initialization():
     # Initialize the class with an actual local test file
     analysis = BlumchenAnalysis(TEST_DATA_FILE)
-    
+
     # Assert successful initialization
     assert analysis is not None
 
+
 # An alternative it owuld be to use @patch for places a real
-# object or function with a "Mock" object so you can test your 
+# object or function with a "Mock" object so you can test your
 # code in isolation without actually running the original logic.

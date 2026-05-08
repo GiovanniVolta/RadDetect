@@ -14,47 +14,60 @@ from scipy.optimize import curve_fit
 
 
 class RadonAnalysis:
-    """
-    A base class for analyzing data from ROOT files.
+    """A base class for analyzing data from ROOT files.
 
-    This class provides methods to retrieve data from a specified URL or local file, generate histograms of MCA channel data,
+    This class provides methods to retrieve data from a specified URL or local file,
+    generate histograms of MCA channel data,
     plot time evolution of the data, and fit the data using specified models.
 
     Attributes:
         mca (numpy.ndarray): MCA channel data.
-        timestamp (numpy.ndarray): Timestamp data.
-        runtime (numpy.ndarray): Runtime data.
+        timestamp (numpy.ndarray): Timestamp data in seconds.
+        runtime (numpy.ndarray): Runtime data in minutes.
     """
 
     DEFAULT_MCA_RANGE = [0, 1300]
     DEFAULT_TIME_RANGE = [0, np.inf]
 
-    def __init__(self, filename, energy_calibration=None):
-        """
-        Initializes the RadonAnalysis class by retrieving data from the specified file path or URL.
+    def __init__(
+        self,
+        filename,
+        energy_calibration=None,
+        compute_runtime_from_timestamp=False,
+        timestamp_interval=60,
+    ):
+        """Initializes the RadonAnalysis class by retrieving data from the specified
+        file path or URL.
 
         Args:
             filename (str): The path or the name the ROOT file.
-            energy_calibration (None or list): The energy calibration parameters. It can be either None or a list [q, m]
+            energy_calibration (None or list): The energy calibration parameters. It can be either
+            None or a list [q, m]
             where q and m are the linear energy calibration parameters.
+            compute_runtime_from_timestamp (bool, optional): If True, computes runtime from the timestamp.
+            Defaults to False.
+            timestamp_interval (int, optional): The list file logging interval in seconds. Defaults to 60.
         """
         self.energy_calibration = energy_calibration
+        self.compute_runtime_from_timestamp = compute_runtime_from_timestamp
+        self.timestamp_interval = timestamp_interval
         if self.energy_calibration is not None:
             warnings.warn(
-                "energy_calibration is not None. this will affect the MCA range selection. Be careful!"
+                "energy_calibration is not None. this will affect the MCA range selection. "
+                "Be careful!"
             )
 
         self.mca, self.timestamp, self.runtime = self.get_data(filename)
 
     def get_data(self, filename):
-        """
-        Retrieves data from a ROOT file located at the specified URL or locally.
+        """Retrieves data from a ROOT file located at the specified URL or locally.
 
         Args:
             filename (str): The name of the ROOT file to retrieve.
 
         Returns:
-            tuple: A tuple containing arrays of MCA channel data, timestamp data, and runtime data.
+            tuple: A tuple containing arrays of MCA channel data, timestamp data (in seconds),
+            and runtime data (in minutes).
         """
         if not filename.endswith(".root"):
             local_path = filename + ".root"
@@ -87,7 +100,12 @@ class RadonAnalysis:
             tree = _file[_file.keys()[0]]
             mca = tree["channel"].array().to_numpy()
             timestamp = tree["timestamp"].array().to_numpy()
-            runtime = tree["runtime"].array().to_numpy()
+            if self.compute_runtime_from_timestamp:
+                # timestamp is in UNIX time in seconds and runtime is in minutes, so we divide by 60.
+                # timestamp_interval is added because the list file is generated every interval (e.g. 60 seconds).
+                runtime = (timestamp - timestamp[0] + self.timestamp_interval) / 60
+            else:
+                runtime = tree["runtime"].array().to_numpy()
 
         # If a temporary file was used, remove it
         if not os.path.exists(local_path):
@@ -99,13 +117,16 @@ class RadonAnalysis:
         return mca, timestamp, runtime
 
     def get_mca_histogram(self, MCA_range=None, time_range=None, n_mca=None):
-        """
-        Generates a histogram of MCA channel data within a specified range and time range.
+        """Generates a histogram of MCA channel data within a specified range and time
+        range.
 
         Args:
-            MCA_range (list, optional): The range of MCA channels to include. Defaults to class DEFAULT_MCA_RANGE.
-            time_range (list, optional): The range of time to include, in minutes. Defaults to class DEFAULT_TIME_RANGE.
-            n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
+            MCA_range (list, optional): The range of MCA channels to include. Defaults
+                                        to class DEFAULT_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes.
+                                        Defaults to class DEFAULT_TIME_RANGE.
+            n_mca (int, optional): The number of channels for the histogram.
+                                If None, the number is determined automatically.
 
         Returns:
             tuple: A tuple containing the histogram data and the channel bins.
@@ -130,13 +151,16 @@ class RadonAnalysis:
         return data, mcas
 
     def get_time_evolution(self, MCA_range=None, time_range=None, n_timestamp=None):
-        """
-        Generates data for the time evolution of the MCA channel data within a specified range and time range.
+        """Generates data for the time evolution of the MCA channel data within a
+        specified range and time range.
 
         Args:
-            MCA_range (list, optional): The range of MCA channels to include. Defaults to class DEFAULT_MCA_RANGE.
-            time_range (list, optional): The range of time to include, in minutes. Defaults to class DEFAULT_TIME_RANGE.
-            n_timestamp (int, optional): The number of timestamps for the histogram. If None, the number is determined automatically.
+            MCA_range (list, optional): The range of MCA channels to include.
+                                        Defaults to class DEFAULT_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes.
+                                        Defaults to class DEFAULT_TIME_RANGE.
+            n_timestamp (int, optional): The number of timestamps for the histogram.
+                                        If None, the number is determined automatically.
 
         Returns:
             tuple: A tuple containing the times, rate, and rate error in seconds and hertz
@@ -167,14 +191,18 @@ class RadonAnalysis:
     def get_base_plot(
         self, MCA_range=None, time_range=None, n_mca=None, n_timestamp=None
     ):
-        """
-        Generates and displays base plots for the MCA channel data, including a histogram, scatter plot, and error bar plot.
+        """Generates and displays base plots for the MCA channel data, including a
+        histogram, scatter plot, and error bar plot.
 
         Args:
-            MCA_range (list, optional): The range of MCA channels for the time evolution plot. Defaults to class DEFAULT_MCA_RANGE.
-            time_range (list, optional): The range of time for the plots, in minutes. Defaults to class DEFAULT_TIME_RANGE.
-            n_mca (int, optional): The number of channels for the histogram. If None, the number is determined automatically.
-            n_timestamp (int, optional): The number of timestamps for the time evolution plot. If None, the number is determined automatically.
+            MCA_range (list, optional): The range of MCA channels for the time evolution plot.
+                                        Defaults to class DEFAULT_MCA_RANGE.
+            time_range (list, optional): The range of time for the plots, in minutes.
+                                        Defaults to class DEFAULT_TIME_RANGE.
+            n_mca (int, optional): The number of channels for the histogram.
+                                    If None, the number is determined automatically.
+            n_timestamp (int, optional): The number of timestamps for the time evolution plot.
+                                    If None, the number is determined automatically.
         """
         MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
         time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
@@ -359,27 +387,29 @@ class RadonAnalysis:
             print("Please ensure you are connected to the MPIK network or VPN.")
             print("!" * 60 + "\n")
             return False
-        
+
     @staticmethod
     def _radon_db_name_format(url):
         """Checks if the URL makes sense."""
-        folder_name = url.split()[-1].split('/')[-2]
+        folder_name = url.split()[-1].split("/")[-2]
         is_upper = folder_name[0].isupper()
         if not is_upper:
             warnings.warn(
                 f"The '{folder_name}' starts with a lowercase letter.\n"
                 f"Radon db typically requires capitalization.\n"
                 f"This can give an error while fetching the data.",
-                UserWarning
+                UserWarning,
             )
 
     @staticmethod
     def _scrape_radon_db(url):
-        # Sends a GET request to the specified URL and parses the content using BeautifulSoup.
+        # Sends a GET request to the specified URL and parses the content 
+        # using BeautifulSoup.
         RadonAnalysis._radon_db_name_format(url)
         page = requests.get(url).text
         soup = BeautifulSoup(page, "html.parser")
-        # Returns a list of URLs, appending the href attribute of each <a> tag that ends with '.root' to the base URL.
+        # Returns a list of URLs, appending the href attribute of each <a> tag 
+        # that ends with '.root' to the base URL.
         return [
             url + node.get("href")
             for node in soup.find_all("a")
@@ -388,9 +418,11 @@ class RadonAnalysis:
 
     @staticmethod
     def _prepare_init_for_fit(Model, init):
-        # Retrieves the names of the parameters (excluding 'self') of the Model's constructor.
+        # Retrieves the names of the parameters (excluding 'self') of 
+        # the Model's constructor.
         parameter_names = list(inspect.signature(Model).parameters.keys())[1:]
-        # Returns a list of initial values for these parameters based on the provided 'init' dictionary.
+        # Returns a list of initial values for these parameters based 
+        # on the provided 'init' dictionary.
         return parameter_names, [init[p] for p in parameter_names]
 
     @staticmethod
@@ -403,7 +435,8 @@ class RadonAnalysis:
         upper_bound=np.inf,
         epsilon=1e-9,
     ):
-        # Retrieves the names of the parameters (excluding 'x') of the model's function.
+        # Retrieves the names of the parameters (excluding 'x') of 
+        # the model's function.
         parameter_names = list(inspect.signature(model).parameters.keys())[1:]
         bounds = []
 
@@ -411,7 +444,8 @@ class RadonAnalysis:
         _limits = limits or {}
         _fixed = fixed or {}
 
-        # Creates bounds for each parameter based on whether it is fixed (using 'epsilon' for tight bounds)
+        # Creates bounds for each parameter based on whether it is fixed 
+        # (using 'epsilon' for tight bounds)
         # or if it is specified in limits
         # or free (using provided 'lower_bound' and 'upper_bound')
         for p in parameter_names:
@@ -421,8 +455,10 @@ class RadonAnalysis:
                 bounds.append((_limits[p][0], _limits[p][1]))
             else:
                 bounds.append((lower_bound, upper_bound))
-        # Separates the bounds into two lists: one for lower bounds and one for upper bounds.
-        lower_bounds, upper_bounds = zip(*bounds)  # Unzip the pairs into two lists
+        # Separates the bounds into two lists: one for lower bounds 
+        # and one for upper bounds.
+        # Unzip the pairs into two lists
+        lower_bounds, upper_bounds = zip(*bounds)  
         return lower_bounds, upper_bounds
 
     @staticmethod
