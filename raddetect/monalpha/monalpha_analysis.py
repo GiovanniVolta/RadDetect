@@ -15,6 +15,22 @@ class MonalphaAnalysis(RadonAnalysis):
         timestamp (numpy.ndarray): Timestamp data.
         runtime (numpy.ndarray): Runtime data.
     """
-
-    DEFAULT_MCA_RANGE = [600, 715]
+    # Used in the full spectrum plot
+    DEFAULT_MCA_RANGE = [0, 1300]
     DEFAULT_TIME_RANGE = [0, np.inf]
+    
+    # To select a specific line to plot the temporal evolution
+    SELECTED_MCA_RANGE = [600, 715]
+    SELECTED_TIME_RANGE = [0, np.inf]
+
+    def __init__(self, filename, compute_runtime_from_timestamp=False, **kwargs):
+        # Pass required arguments to the parent class (RadonAnalysis) if needed
+        super().__init__(filename=filename) 
+        
+        self.compute_runtime_from_timestamp = compute_runtime_from_timestamp
+        
+        # Override the class defaults with passed arguments, or fall back to defaults
+        self.DEFAULT_MCA_RANGE = kwargs.get('DEFAULT_MCA_RANGE', self.DEFAULT_MCA_RANGE)
+        self.DEFAULT_TIME_RANGE = kwargs.get('DEFAULT_TIME_RANGE', self.DEFAULT_TIME_RANGE)
+        self.SELECTED_MCA_RANGE = kwargs.get('SELECTED_MCA_RANGE', self.SELECTED_MCA_RANGE)
+        self.SELECTED_TIME_RANGE = kwargs.get('SELECTED_TIME_RANGE', self.SELECTED_TIME_RANGE)

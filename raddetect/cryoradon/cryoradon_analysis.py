@@ -3,8 +3,8 @@ import numpy as np
 from ..base_analysis import RadonAnalysis
 
 
-class BlumchenAnalysis(RadonAnalysis):
-    """A class for analyzing data from ROOT files, specifically designed for Blumchen
+class CryoRadonAnalysis(RadonAnalysis):
+    """A class for analyzing data from ROOT files, specifically designed for CryoRadon
     analysis.
 
     This class provides methods to retrieve data from a specified URL, generate histograms of MCA channel data,
@@ -16,12 +16,12 @@ class BlumchenAnalysis(RadonAnalysis):
         runtime (numpy.ndarray): Runtime data.
     """
     # Used in the full spectrum plot
-    DEFAULT_MCA_RANGE = [0, 1300]
+    DEFAULT_MCA_RANGE = [0, 800]
     DEFAULT_TIME_RANGE = [0, np.inf]
     
     # To select a specific line to plot the temporal evolution
-    SELECTED_MCA_RANGE = [910, 1060]
-    SELECTED_TIME_RANGE = [240, np.inf]
+    SELECTED_MCA_RANGE = [350, 390]
+    SELECTED_TIME_RANGE = [0, np.inf]
     
     def __init__(self, filename, compute_runtime_from_timestamp=False, **kwargs):
         # Pass required arguments to the parent class (RadonAnalysis) if needed

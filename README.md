@@ -2,7 +2,7 @@
 Advanced Spectroscopy and Emanation Analysis for Radon Content Characterization in Diverse Environments
 
 ``raddetect`` is a utility package for Radon content characterization. 
-It is designed to handle `.root` files containing `channel`, `timestamp`, and `runtime` data, which are the result of the Radon Emanation Database's processing of ORTEC MCA list files. These files originate from detectors like Blumchen (an electrostatic radon monitor), Mona (an alpha spectroscopy setup), and CryoRadon (a cryogenic radon emanation monitor, which is not yet implemented). Due to a bug in the ORTEC file creation process, the runtime can be computed from the timestamps, which are set 60 seconds apart by the DAQ during list mode data acquisition.
+It is designed to handle `.root` files containing `channel`, `timestamp`, and `runtime` data, which are the result of the Radon Emanation Database's processing of ORTEC MCA list files. These files originate from detectors like Blumchen (an electrostatic radon monitor), Mona (an alpha spectroscopy setup), and CryoRadon (a cryogenic radon emanation monitor). Due to a bug in the ORTEC file creation process, the runtime can be computed from the timestamps, which are set 60 seconds apart by the DAQ during list mode data acquisition.
  
 > [!NOTE]
 > If you are not connected to the MPIK network (or VPN), you will not be able to fetch data from the radon database automatically. In this case, you must provide the ROOT files locally to the analysis modules.
@@ -20,7 +20,19 @@ pip install .
 pip install -e .
 ```
 
+## Configuration Parameters
+
+When initializing the function, you can pass additional keyword arguments to override the default MCA and Time ranges. This is useful for different if the MCA and the amplifier change:
+
+* `DEFAULT_MCA_RANGE` (list, default `[0, 1300]`): Default range of MCA channels to plot in the full spectrum.
+* `DEFAULT_TIME_RANGE` (list, default `[0, np.inf]`): Default time range in minutes.
+* `SELECTED_MCA_RANGE` (list, default `[910, 1060]`): Range used for fitting the peak and analyzing time evolution.
+* `SELECTED_TIME_RANGE` (list, default `[240, np.inf]`): Time range for time evolution analysis.
+* `compute_runtime_from_timestamp` (bool, default `False`): If `True`, computes runtime from the timestamps (useful for fixing ORTEC acquisition runtime bugs).
+
+
 ## Running tests, linter, and code formatting
+
 
 Before making a commit, it is important to run the tests and ensure the code is properly formatted. Tests are handled via `pytest`, general linting and formatting via `ruff`, and docstring formatting via `docformatter`. Make sure you have all of them installed (`pip install pytest ruff docformatter`).
 

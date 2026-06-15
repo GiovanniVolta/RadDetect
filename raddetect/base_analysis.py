@@ -26,9 +26,14 @@ class RadonAnalysis:
         runtime (numpy.ndarray): Runtime data in minutes.
     """
 
+    # Used in the full spectrum plot
     DEFAULT_MCA_RANGE = [0, 1300]
     DEFAULT_TIME_RANGE = [0, np.inf]
-
+    
+    # To select a specific line to plot the temporal evolution
+    SELECTED_MCA_RANGE = [0, 1300]
+    SELECTED_TIME_RANGE = [0, np.inf]
+    
     def __init__(
         self,
         filename,
@@ -118,7 +123,8 @@ class RadonAnalysis:
 
     def get_mca_histogram(self, MCA_range=None, time_range=None, n_mca=None):
         """Generates a histogram of MCA channel data within a specified range and time
-        range.
+        range. If nothing is specified, the spectrum will be done using the DEFUALT 
+        intervals.
 
         Args:
             MCA_range (list, optional): The range of MCA channels to include. Defaults
@@ -134,6 +140,10 @@ class RadonAnalysis:
         MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
         time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
 
+        # print('get_mca_histogram')
+        # print(MCA_range)
+        # print(time_range)
+        
         # Apply filters based on MCA range and time range
         mask = (
             (self.mca >= MCA_range[0])
@@ -152,22 +162,27 @@ class RadonAnalysis:
 
     def get_time_evolution(self, MCA_range=None, time_range=None, n_timestamp=None):
         """Generates data for the time evolution of the MCA channel data within a
-        specified range and time range.
+        specified range and time range. If nothing is specified, the spectrum will 
+        be done using the SELECTED intervals.
 
         Args:
             MCA_range (list, optional): The range of MCA channels to include.
-                                        Defaults to class DEFAULT_MCA_RANGE.
+                                        Defaults to class SELECTED_MCA_RANGE.
             time_range (list, optional): The range of time to include, in minutes.
-                                        Defaults to class DEFAULT_TIME_RANGE.
+                                        Defaults to class SELECTED_TIME_RANGE.
             n_timestamp (int, optional): The number of timestamps for the histogram.
                                         If None, the number is determined automatically.
 
         Returns:
             tuple: A tuple containing the times, rate, and rate error in seconds and hertz
         """
-        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
-        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
+        MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
+        time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
+        # print('get_time_evolution')
+        # print(MCA_range)
+        # print(time_range)
+        
         # Apply filters based on MCA range and time range
         mask = (
             (self.mca >= MCA_range[0])
@@ -196,17 +211,21 @@ class RadonAnalysis:
 
         Args:
             MCA_range (list, optional): The range of MCA channels for the time evolution plot.
-                                        Defaults to class DEFAULT_MCA_RANGE.
+                                        Defaults to class SELECTED_MCA_RANGE.
             time_range (list, optional): The range of time for the plots, in minutes.
-                                        Defaults to class DEFAULT_TIME_RANGE.
+                                        Defaults to class SELECTED_TIME_RANGE.
             n_mca (int, optional): The number of channels for the histogram.
                                     If None, the number is determined automatically.
             n_timestamp (int, optional): The number of timestamps for the time evolution plot.
                                     If None, the number is determined automatically.
         """
-        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
-        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
+        MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
+        time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
+        # print('get_base_plot')
+        # print(MCA_range)
+        # print(time_range)
+        
         # Plotting
         fig, axs = plt.subplots(1, 3, figsize=(18, 5), dpi=150)
         axs = axs.flatten()
@@ -217,14 +236,14 @@ class RadonAnalysis:
             axs[1].set_ylabel("Energy [keV]")
             axs[0].set_xlabel("Energy [keV]")
             _MCA_range = [
-                (0 - self.energy_calibration[1]) / self.energy_calibration[0],
-                (1300 - self.energy_calibration[1]) / self.energy_calibration[0],
+                (self.DEFAULT_MCA_RANGE[0] - self.energy_calibration[1]) / self.energy_calibration[0],
+                (self.DEFAULT_MCA_RANGE[1] - self.energy_calibration[1]) / self.energy_calibration[0],
             ]
         else:
             label = f"Time evolution in {MCA_range} MCA ch"
             axs[1].set_ylabel("MCA channel")
             axs[0].set_xlabel("MCA channel")
-            _MCA_range = [0, 1300]
+            _MCA_range = self.DEFAULT_MCA_RANGE
 
         data, mcas = self.get_mca_histogram(
             MCA_range=_MCA_range, time_range=time_range, n_mca=n_mca
@@ -281,9 +300,13 @@ class RadonAnalysis:
         n_mca=None,
         prefit=True,
     ):
-        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
-        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
+        MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
+        time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
+        # print('get_mca_spectrum_fitting_object')
+        # print(MCA_range)
+        # print(time_range)
+        
         data, mcas = self.get_mca_histogram(
             MCA_range=MCA_range, time_range=time_range, n_mca=n_mca
         )
@@ -334,9 +357,13 @@ class RadonAnalysis:
         rate_limit=0,
         prefit=True,
     ):
-        MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
-        time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
+        MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
+        time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
+        # print('get_time_evolution_fitting_object')
+        # print(MCA_range)
+        # print(time_range)
+        
         times, rate, rate_err = self.get_time_evolution(
             MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp
         )

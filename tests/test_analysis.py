@@ -2,6 +2,7 @@ import os
 
 from raddetect.base_analysis import RadonAnalysis
 from raddetect.blumchen.blumchen_analysis import BlumchenAnalysis
+from raddetect.cryoradon.cryoradon_analysis import CryoRadonAnalysis
 from raddetect.monalpha.monalpha_analysis import MonalphaAnalysis
 
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -46,6 +47,15 @@ def test_blumchen_initialization():
     assert analysis is not None
 
 
+def test_cryoradon_initialization():
+    # Initialize the class with an actual local test file
+    analysis = CryoRadonAnalysis(TEST_DATA_FILE)
+
+    # Assert successful initialization
+    assert analysis is not None
+
+
 # An alternative it owuld be to use @patch for places a real
 # object or function with a "Mock" object so you can test your
 # code in isolation without actually running the original logic.
+
