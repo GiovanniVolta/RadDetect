@@ -154,8 +154,14 @@ class RadonAnalysis:
         selected_mca = self.mca[mask]
 
         # Generate histogram
-        mca_min, mca_max = selected_mca.min(), selected_mca.max()
-        mca_bins = np.linspace(mca_min, mca_max, n_mca or int(mca_max - mca_min))
+        if n_mca is None:
+            # Bins are exactly 1 integer wide. 
+            # +2 ensures the upper bound is fully included as a bin edge.
+            mca_bins = np.arange(MCA_range[0], MCA_range[1] + 2)
+        else:
+            # If a specific number of bins is requested, calculate edges evenly
+            mca_bins = np.linspace(MCA_range[0], MCA_range[1], n_mca + 1)
+            
         data, _ = np.histogram(selected_mca, bins=mca_bins)
         mcas = 0.5 * (mca_bins[1:] + mca_bins[:-1])
         return data, mcas
@@ -263,6 +269,9 @@ class RadonAnalysis:
 
         # Scatter plot of runtime vs MCA channel
         axs[1].scatter(self.runtime, self.mca, s=3, color="black", alpha=0.3)
+        axs[1].axvspan(0, time_range[0], color="grey", lw=0, alpha=0.5)
+        if time_range[1] != float('inf') and time_range[1] is not None:
+            axs[1].axvspan(time_range[1], max(self.runtime), color="grey", lw=0, alpha=0.5)
         axs[1].axhspan(*MCA_range, color="pink", lw=0, alpha=0.5)
         axs[1].set_xlabel("Runtime [minutes]")
         axs[1].set_ylim(_MCA_range)
