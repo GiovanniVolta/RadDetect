@@ -296,7 +296,7 @@ class RadonAnalysis:
 
         plt.tight_layout()
         plt.show()
-
+        
     def get_mca_spectrum_fitting_object(
         self,
         model,
@@ -312,14 +312,12 @@ class RadonAnalysis:
         MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
-        # print('get_mca_spectrum_fitting_object')
-        # print(MCA_range)
-        # print(time_range)
-        
         data, mcas = self.get_mca_histogram(
             MCA_range=MCA_range, time_range=time_range, n_mca=n_mca
         )
 
+        # Truncating data biases the tails. Consider dropping this limit in the future
+        # if you switch to a Poisson Maximum Likelihood cost function.
         mask = data > MCA_counts_limit
         _data = data[mask]
         _mcas = mcas[mask]
@@ -327,32 +325,56 @@ class RadonAnalysis:
         _parameter_names, _init = self._prepare_init_for_fit(model, init)
 
         if prefit:
-            print("Prefit with scipy for deriving inital values")
+            print("Prefit with scipy for deriving initial values...")
             _bounds = self._prepare_bounds_for_fit(model, init, fixed, limits)
-            _init, _init_cov = curve_fit(
-                model.total_model,
-                _mcas,
-                _data,
-                sigma=np.sqrt(_data),
-                absolute_sigma=True,
-                p0=_init,
-                maxfev=500000,
-                bounds=_bounds,
-            )
-            _init_err = np.sqrt(np.diag(_init_cov))
-            self.print_table(_parameter_names, _init, _init_err)
+            
+            # Protect against 0 counts causing division-by-zero in weights
+            _sigma = np.maximum(np.sqrt(_data), 1)
+            
+            try:
+                # Suppress scipy optimize warnings so they don't flood the terminal
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    
+                    _pre_init, _init_cov = curve_fit(
+                        model.total_model,
+                        _mcas,
+                        _data,
+                        sigma=_sigma,
+                        absolute_sigma=True,
+                        p0=_init,
+                        maxfev=500000,
+                        bounds=_bounds,
+                    )
+                
+                # Only overwrite initial values if covariance is valid
+                if not np.isinf(_init_cov).any():
+                    _init = _pre_init
+                    _init_err = np.sqrt(np.diag(_init_cov))
+                    self.print_table(_parameter_names, _init, _init_err)
+                else:
+                    print("Prefit converged but covariance is infinite. Falling back to manual init.")
+                    
+            except RuntimeError:
+                print("Prefit failed to converge. Falling back to manual init.")
 
+        # Note: For low background spectra, consider cost.ExtendedBinnedNLL in the future
         cost_function = cost.LeastSquares(
-            _mcas, _data, np.sqrt(_data), model.total_model
+            _mcas, _data, np.maximum(np.sqrt(_data), 1), model.total_model
         )
+        
         m = Minuit(cost_function, *_init)
-        if limits is not None:
-            for k in limits.keys():
-                m.limits[k] = limits[k]
-        if fixed is not None:
-            for k in fixed.keys():
-                m.fixed[k] = fixed[k]
+        
+        # Cleaned up dictionary iteration
+        if limits:
+            for k, v in limits.items():
+                m.limits[k] = v
+        if fixed:
+            for k, v in fixed.items():
+                m.fixed[k] = v
+                
         return m
+    
 
     def get_time_evolution_fitting_object(
         self,
@@ -488,7 +510,10 @@ class RadonAnalysis:
             if _fixed.get(p, False):
                 bounds.append((init[p] - epsilon, init[p] + epsilon))
             elif p in _limits.keys():
-                bounds.append((_limits[p][0], _limits[p][1]))
+                lb = -np.inf if _limits[p][0] is None else _limits[p][0]
+                ub =  np.inf if _limits[p][1] is None else _limits[p][1]
+                bounds.append((lb, ub))
+                # bounds.append((_limits[p][0], _limits[p][1]))
             else:
                 bounds.append((lower_bound, upper_bound))
         # Separates the bounds into two lists: one for lower bounds 
