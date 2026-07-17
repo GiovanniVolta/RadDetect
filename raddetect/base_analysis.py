@@ -1,17 +1,15 @@
-import inspect
 import os
 import tempfile
 import urllib.request
 import warnings
-
-import matplotlib.pyplot as plt
+import inspect
 import numpy as np
-import requests
+import matplotlib.pyplot as plt
 import uproot
+import requests
 from bs4 import BeautifulSoup
-from iminuit import Minuit, cost
 from scipy.optimize import curve_fit
-
+from iminuit import Minuit, cost
 
 class RadonAnalysis:
     """A base class for analyzing data from ROOT files.
@@ -121,7 +119,7 @@ class RadonAnalysis:
 
         return mca, timestamp, runtime
 
-    def get_mca_histogram(self, MCA_range=None, time_range=None, n_mca=None):
+    def get_mca_histogram(self, MCA_range=None, time_range=None, n_mca=None, exclude_time_range=None):
         """Generates a histogram of MCA channel data within a specified range and time
         range. If nothing is specified, the spectrum will be done using the DEFUALT 
         intervals.
@@ -133,6 +131,7 @@ class RadonAnalysis:
                                         Defaults to class DEFAULT_TIME_RANGE.
             n_mca (int, optional): The number of channels for the histogram.
                                 If None, the number is determined automatically.
+            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude.
 
         Returns:
             tuple: A tuple containing the histogram data and the channel bins.
@@ -140,10 +139,6 @@ class RadonAnalysis:
         MCA_range = MCA_range if MCA_range is not None else self.DEFAULT_MCA_RANGE
         time_range = time_range if time_range is not None else self.DEFAULT_TIME_RANGE
 
-        # print('get_mca_histogram')
-        # print(MCA_range)
-        # print(time_range)
-        
         # Apply filters based on MCA range and time range
         mask = (
             (self.mca >= MCA_range[0])
@@ -151,6 +146,14 @@ class RadonAnalysis:
             & (self.runtime > time_range[0])
             & (self.runtime < time_range[1])
         )
+        
+        # Exclude the specific time frame if provided
+        if exclude_time_range is not None:
+            mask &= ~(
+                (self.runtime >= exclude_time_range[0]) & 
+                (self.runtime <= exclude_time_range[1])
+            )
+
         selected_mca = self.mca[mask]
 
         # Generate histogram
@@ -166,7 +169,7 @@ class RadonAnalysis:
         mcas = 0.5 * (mca_bins[1:] + mca_bins[:-1])
         return data, mcas
 
-    def get_time_evolution(self, MCA_range=None, time_range=None, n_timestamp=None):
+    def get_time_evolution(self, MCA_range=None, time_range=None, n_timestamp=None, exclude_time_range=None):
         """Generates data for the time evolution of the MCA channel data within a
         specified range and time range. If nothing is specified, the spectrum will 
         be done using the SELECTED intervals.
@@ -178,6 +181,7 @@ class RadonAnalysis:
                                         Defaults to class SELECTED_TIME_RANGE.
             n_timestamp (int, optional): The number of timestamps for the histogram.
                                         If None, the number is determined automatically.
+            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude.
 
         Returns:
             tuple: A tuple containing the times, rate, and rate error in seconds and hertz
@@ -185,10 +189,6 @@ class RadonAnalysis:
         MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
-        # print('get_time_evolution')
-        # print(MCA_range)
-        # print(time_range)
-        
         # Apply filters based on MCA range and time range
         mask = (
             (self.mca >= MCA_range[0])
@@ -196,6 +196,13 @@ class RadonAnalysis:
             & (self.runtime > time_range[0])
             & (self.runtime < time_range[1])
         )
+        
+        if exclude_time_range is not None:
+            mask &= ~(
+                (self.runtime >= exclude_time_range[0]) & 
+                (self.runtime <= exclude_time_range[1])
+            )
+
         selected_runtime = self.runtime[mask]
 
         # Generate time evolution data
@@ -207,10 +214,24 @@ class RadonAnalysis:
         times = 0.5 * (time_bins[:-1] + time_bins[1:]) * 60
         rate = data_time_evolution / dt
         rate_err = np.sqrt(data_time_evolution) / dt
+        
+        # Remove empty bins from the output so they don't break downstream fitting
+        if exclude_time_range is not None:
+            # Convert exclude_time_range to seconds to match the 'times' array
+            exclude_start_sec = exclude_time_range[0] * 60
+            exclude_end_sec = exclude_time_range[1] * 60
+            
+            # Keep only the bins that fall outside the excluded range
+            valid_bins_mask = ~((times >= exclude_start_sec) & (times <= exclude_end_sec))
+            
+            times = times[valid_bins_mask]
+            rate = rate[valid_bins_mask]
+            rate_err = rate_err[valid_bins_mask]
+
         return times, rate, rate_err
 
     def get_base_plot(
-        self, MCA_range=None, time_range=None, n_mca=None, n_timestamp=None
+        self, MCA_range=None, time_range=None, n_mca=None, n_timestamp=None, exclude_time_range=None
     ):
         """Generates and displays base plots for the MCA channel data, including a
         histogram, scatter plot, and error bar plot.
@@ -224,14 +245,11 @@ class RadonAnalysis:
                                     If None, the number is determined automatically.
             n_timestamp (int, optional): The number of timestamps for the time evolution plot.
                                     If None, the number is determined automatically.
+            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude.
         """
         MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
-        # print('get_base_plot')
-        # print(MCA_range)
-        # print(time_range)
-        
         # Plotting
         fig, axs = plt.subplots(1, 3, figsize=(18, 5), dpi=150)
         axs = axs.flatten()
@@ -252,10 +270,10 @@ class RadonAnalysis:
             _MCA_range = self.DEFAULT_MCA_RANGE
 
         data, mcas = self.get_mca_histogram(
-            MCA_range=_MCA_range, time_range=time_range, n_mca=n_mca
+            MCA_range=_MCA_range, time_range=time_range, n_mca=n_mca, exclude_time_range=exclude_time_range
         )
         times, rate, rate_err = self.get_time_evolution(
-            MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp
+            MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp, exclude_time_range=exclude_time_range
         )
 
         # MCA histogram
@@ -272,6 +290,11 @@ class RadonAnalysis:
         axs[1].axvspan(0, time_range[0], color="grey", lw=0, alpha=0.5)
         if time_range[1] != float('inf') and time_range[1] is not None:
             axs[1].axvspan(time_range[1], max(self.runtime), color="grey", lw=0, alpha=0.5)
+            
+        if exclude_time_range is not None:
+            axs[1].axvspan(exclude_time_range[0], exclude_time_range[1], color="red", lw=0, alpha=0.3, hatch='//', label="Excluded")
+            axs[1].legend(loc='upper right')
+
         axs[1].axhspan(*MCA_range, color="pink", lw=0, alpha=0.5)
         axs[1].set_xlabel("Runtime [minutes]")
         axs[1].set_ylim(_MCA_range)
@@ -296,7 +319,7 @@ class RadonAnalysis:
 
         plt.tight_layout()
         plt.show()
-        
+
     def get_mca_spectrum_fitting_object(
         self,
         model,
@@ -308,12 +331,30 @@ class RadonAnalysis:
         MCA_counts_limit=5,
         n_mca=None,
         prefit=True,
+        exclude_time_range=None,
     ):
+        """Generates an iminuit Minuit object for fitting the MCA spectrum.
+
+        Args:
+            model (class/object): The model class containing a `total_model` method to fit the data.
+            init (dict): Initial guesses for the model parameters.
+            limits (dict, optional): Parameter bounds for the fit. Defaults to None.
+            fixed (dict, optional): Boolean dictionary specifying which parameters to fix. Defaults to None.
+            MCA_range (list, optional): The range of MCA channels to include. Defaults to class SELECTED_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes. Defaults to class SELECTED_TIME_RANGE.
+            MCA_counts_limit (int, optional): Minimum threshold for bin counts to include in the fit. Defaults to 5.
+            n_mca (int, optional): The number of channels for the histogram. If None, determined automatically.
+            prefit (bool, optional): If True, uses scipy.optimize.curve_fit to derive initial values before using Minuit. Defaults to True.
+            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude from the fit.
+
+        Returns:
+            iminuit.Minuit: The configured Minuit fitting object ready to be minimized.
+        """
         MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
         data, mcas = self.get_mca_histogram(
-            MCA_range=MCA_range, time_range=time_range, n_mca=n_mca
+            MCA_range=MCA_range, time_range=time_range, n_mca=n_mca, exclude_time_range=exclude_time_range
         )
 
         # Truncating data biases the tails. Consider dropping this limit in the future
@@ -375,7 +416,6 @@ class RadonAnalysis:
                 
         return m
     
-
     def get_time_evolution_fitting_object(
         self,
         model,
@@ -387,16 +427,30 @@ class RadonAnalysis:
         n_timestamp=None,
         rate_limit=0,
         prefit=True,
+        exclude_time_range=None,
     ):
+        """Generates an iminuit Minuit object for fitting the time evolution data.
+
+        Args:
+            model (class/object): The model class containing a `total_model` method to fit the data.
+            init (dict): Initial guesses for the model parameters.
+            limits (dict, optional): Parameter bounds for the fit. Defaults to None.
+            fixed (dict, optional): Boolean dictionary specifying which parameters to fix. Defaults to None.
+            MCA_range (list, optional): The range of MCA channels to include. Defaults to class SELECTED_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes. Defaults to class SELECTED_TIME_RANGE.
+            n_timestamp (int, optional): The number of timestamps for the histogram. If None, determined automatically.
+            rate_limit (float, optional): Minimum threshold for the rate to include in the fit. Defaults to 0.
+            prefit (bool, optional): If True, uses scipy.optimize.curve_fit to derive initial values before using Minuit. Defaults to True.
+            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude from the fit.
+
+        Returns:
+            iminuit.Minuit: The configured Minuit fitting object ready to be minimized.
+        """
         MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
-        # print('get_time_evolution_fitting_object')
-        # print(MCA_range)
-        # print(time_range)
-        
         times, rate, rate_err = self.get_time_evolution(
-            MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp
+            MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp, exclude_time_range=exclude_time_range
         )
 
         mask = rate > rate_limit
@@ -431,6 +485,44 @@ class RadonAnalysis:
             for k in fixed.keys():
                 m.fixed[k] = fixed[k]
         return m
+    
+    def get_livetime(self, time_range=None, exclude_time_range=None):
+        """Calculates the total livetime in minutes for the specified ranges,
+        accounting for any excluded time windows.
+
+        Args:
+            time_range (list, optional): The time window [start, end] in minutes.
+            Defaults to class SELECTED_TIME_RANGE.
+            exclude_time_range (list, optional): A specific time window [start, end] 
+            in minutes to exclude.
+        Returns:
+            float: Total valid livetime in minutes.
+        """
+        time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
+        
+        if len(self.runtime) == 0:
+            return 0.0
+
+        # Define the absolute start and end based on the data and provided limits
+        t_start = max(time_range[0], self.runtime.min())
+        t_end = min(time_range[1], self.runtime.max())
+        
+        # If the start is after the end (invalid range), livetime is 0
+        if t_start >= t_end:
+            return 0.0
+            
+        livetime = t_end - t_start
+        
+        # Subtract the excluded time if it overlaps with our active window
+        if exclude_time_range is not None:
+            excl_start = max(t_start, exclude_time_range[0])
+            excl_end = min(t_end, exclude_time_range[1])
+            
+            # If the excluded range falls inside our window, subtract it
+            if excl_start < excl_end:
+                livetime -= (excl_end - excl_start)
+                
+        return livetime
 
     @staticmethod
     def _radon_db_is_reachable(url):
