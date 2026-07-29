@@ -26,9 +26,10 @@ def test_radon_analysis_get_mca_histogram():
     )
 
     # Verify the histogram outputs
-    # 10 bins, 9 values and 9 center bins
-    assert len(data) == 9
-    assert len(mcas) == 9
+    # It used to be 10 bins, 9 values and 9 center bins
+    # But now it is bins = n_mca + 1
+    assert len(data) == 10
+    assert len(mcas) == 10
 
 
 def test_monalpha_initialization():
@@ -58,4 +59,3 @@ def test_cryoradon_initialization():
 # An alternative it owuld be to use @patch for places a real
 # object or function with a "Mock" object so you can test your
 # code in isolation without actually running the original logic.
-

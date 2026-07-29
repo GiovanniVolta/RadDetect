@@ -1,15 +1,17 @@
+import inspect
 import os
 import tempfile
 import urllib.request
 import warnings
-import inspect
-import numpy as np
+
 import matplotlib.pyplot as plt
-import uproot
+import numpy as np
 import requests
+import uproot
 from bs4 import BeautifulSoup
-from scipy.optimize import curve_fit
 from iminuit import Minuit, cost
+from scipy.optimize import curve_fit
+
 
 class RadonAnalysis:
     """A base class for analyzing data from ROOT files.
@@ -27,11 +29,11 @@ class RadonAnalysis:
     # Used in the full spectrum plot
     DEFAULT_MCA_RANGE = [0, 1300]
     DEFAULT_TIME_RANGE = [0, np.inf]
-    
+
     # To select a specific line to plot the temporal evolution
     SELECTED_MCA_RANGE = [0, 1300]
     SELECTED_TIME_RANGE = [0, np.inf]
-    
+
     def __init__(
         self,
         filename,
@@ -44,20 +46,23 @@ class RadonAnalysis:
 
         Args:
             filename (str): The path or the name the ROOT file.
-            energy_calibration (None or list): The energy calibration parameters. It can be either
+            energy_calibration (None or list): The energy calibration parameters.
+            It can be either
             None or a list [q, m]
             where q and m are the linear energy calibration parameters.
-            compute_runtime_from_timestamp (bool, optional): If True, computes runtime from the timestamp.
+            compute_runtime_from_timestamp (bool, optional): If True, computes
+            runtime from the timestamp.
             Defaults to False.
-            timestamp_interval (int, optional): The list file logging interval in seconds. Defaults to 60.
+            timestamp_interval (int, optional): The list file logging interval
+            in seconds. Defaults to 60.
         """
         self.energy_calibration = energy_calibration
         self.compute_runtime_from_timestamp = compute_runtime_from_timestamp
         self.timestamp_interval = timestamp_interval
         if self.energy_calibration is not None:
             warnings.warn(
-                "energy_calibration is not None. this will affect the MCA range selection. "
-                "Be careful!"
+                "energy_calibration is not None. this will affect the MCA "
+                "range selection. Be careful!"
             )
 
         self.mca, self.timestamp, self.runtime = self.get_data(filename)
@@ -69,8 +74,8 @@ class RadonAnalysis:
             filename (str): The name of the ROOT file to retrieve.
 
         Returns:
-            tuple: A tuple containing arrays of MCA channel data, timestamp data (in seconds),
-            and runtime data (in minutes).
+            tuple: A tuple containing arrays of MCA channel data,
+            timestamp data (in seconds), and runtime data (in minutes).
         """
         if not filename.endswith(".root"):
             local_path = filename + ".root"
@@ -104,8 +109,10 @@ class RadonAnalysis:
             mca = tree["channel"].array().to_numpy()
             timestamp = tree["timestamp"].array().to_numpy()
             if self.compute_runtime_from_timestamp:
-                # timestamp is in UNIX time in seconds and runtime is in minutes, so we divide by 60.
-                # timestamp_interval is added because the list file is generated every interval (e.g. 60 seconds).
+                # timestamp is in UNIX time in seconds and runtime is in minutes,
+                # so we divide by 60.
+                # timestamp_interval is added because the list file is generated
+                # every interval (e.g. 60 seconds).
                 runtime = (timestamp - timestamp[0] + self.timestamp_interval) / 60
             else:
                 runtime = tree["runtime"].array().to_numpy()
@@ -119,9 +126,11 @@ class RadonAnalysis:
 
         return mca, timestamp, runtime
 
-    def get_mca_histogram(self, MCA_range=None, time_range=None, n_mca=None, exclude_time_range=None):
+    def get_mca_histogram(
+        self, MCA_range=None, time_range=None, n_mca=None, exclude_time_range=None
+    ):
         """Generates a histogram of MCA channel data within a specified range and time
-        range. If nothing is specified, the spectrum will be done using the DEFUALT 
+        range. If nothing is specified, the spectrum will be done using the DEFUALT
         intervals.
 
         Args:
@@ -131,7 +140,8 @@ class RadonAnalysis:
                                         Defaults to class DEFAULT_TIME_RANGE.
             n_mca (int, optional): The number of channels for the histogram.
                                 If None, the number is determined automatically.
-            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude.
+            exclude_time_range (list, optional): A specific time window [start, end]
+                                                in minutes to exclude.
 
         Returns:
             tuple: A tuple containing the histogram data and the channel bins.
@@ -146,33 +156,35 @@ class RadonAnalysis:
             & (self.runtime > time_range[0])
             & (self.runtime < time_range[1])
         )
-        
+
         # Exclude the specific time frame if provided
         if exclude_time_range is not None:
             mask &= ~(
-                (self.runtime >= exclude_time_range[0]) & 
-                (self.runtime <= exclude_time_range[1])
+                (self.runtime >= exclude_time_range[0])
+                & (self.runtime <= exclude_time_range[1])
             )
 
         selected_mca = self.mca[mask]
 
         # Generate histogram
         if n_mca is None:
-            # Bins are exactly 1 integer wide. 
+            # Bins are exactly 1 integer wide.
             # +2 ensures the upper bound is fully included as a bin edge.
             mca_bins = np.arange(MCA_range[0], MCA_range[1] + 2)
         else:
             # If a specific number of bins is requested, calculate edges evenly
             mca_bins = np.linspace(MCA_range[0], MCA_range[1], n_mca + 1)
-            
+
         data, _ = np.histogram(selected_mca, bins=mca_bins)
         mcas = 0.5 * (mca_bins[1:] + mca_bins[:-1])
         return data, mcas
 
-    def get_time_evolution(self, MCA_range=None, time_range=None, n_timestamp=None, exclude_time_range=None):
+    def get_time_evolution(
+        self, MCA_range=None, time_range=None, n_timestamp=None, exclude_time_range=None
+    ):
         """Generates data for the time evolution of the MCA channel data within a
-        specified range and time range. If nothing is specified, the spectrum will 
-        be done using the SELECTED intervals.
+        specified range and time range. If nothing is specified, the spectrum will be
+        done using the SELECTED intervals.
 
         Args:
             MCA_range (list, optional): The range of MCA channels to include.
@@ -181,10 +193,12 @@ class RadonAnalysis:
                                         Defaults to class SELECTED_TIME_RANGE.
             n_timestamp (int, optional): The number of timestamps for the histogram.
                                         If None, the number is determined automatically.
-            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude.
+            exclude_time_range (list, optional): A specific time window [start, end]
+                                        in minutes to exclude.
 
         Returns:
-            tuple: A tuple containing the times, rate, and rate error in seconds and hertz
+            tuple: A tuple containing the times, rate, and rate error in seconds
+                and hertz
         """
         MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
@@ -196,11 +210,11 @@ class RadonAnalysis:
             & (self.runtime > time_range[0])
             & (self.runtime < time_range[1])
         )
-        
+
         if exclude_time_range is not None:
             mask &= ~(
-                (self.runtime >= exclude_time_range[0]) & 
-                (self.runtime <= exclude_time_range[1])
+                (self.runtime >= exclude_time_range[0])
+                & (self.runtime <= exclude_time_range[1])
             )
 
         selected_runtime = self.runtime[mask]
@@ -214,16 +228,19 @@ class RadonAnalysis:
         times = 0.5 * (time_bins[:-1] + time_bins[1:]) * 60
         rate = data_time_evolution / dt
         rate_err = np.sqrt(data_time_evolution) / dt
-        
-        # Remove empty bins from the output so they don't break downstream fitting
+
+        # Remove empty bins from the output so they don't break
+        # downstream fitting
         if exclude_time_range is not None:
             # Convert exclude_time_range to seconds to match the 'times' array
             exclude_start_sec = exclude_time_range[0] * 60
             exclude_end_sec = exclude_time_range[1] * 60
-            
+
             # Keep only the bins that fall outside the excluded range
-            valid_bins_mask = ~((times >= exclude_start_sec) & (times <= exclude_end_sec))
-            
+            valid_bins_mask = ~(
+                (times >= exclude_start_sec) & (times <= exclude_end_sec)
+            )
+
             times = times[valid_bins_mask]
             rate = rate[valid_bins_mask]
             rate_err = rate_err[valid_bins_mask]
@@ -231,21 +248,29 @@ class RadonAnalysis:
         return times, rate, rate_err
 
     def get_base_plot(
-        self, MCA_range=None, time_range=None, n_mca=None, n_timestamp=None, exclude_time_range=None
+        self,
+        MCA_range=None,
+        time_range=None,
+        n_mca=None,
+        n_timestamp=None,
+        exclude_time_range=None,
     ):
-        """Generates and displays base plots for the MCA channel data, including a
-        histogram, scatter plot, and error bar plot.
+        """Generates and displays base plots for the MCA channel data,
+        including a histogram, scatter plot, and error bar plot.
 
         Args:
-            MCA_range (list, optional): The range of MCA channels for the time evolution plot.
+            MCA_range (list, optional): The range of MCA channels for the time
+                                        evolution plot.
                                         Defaults to class SELECTED_MCA_RANGE.
             time_range (list, optional): The range of time for the plots, in minutes.
                                         Defaults to class SELECTED_TIME_RANGE.
             n_mca (int, optional): The number of channels for the histogram.
                                     If None, the number is determined automatically.
-            n_timestamp (int, optional): The number of timestamps for the time evolution plot.
+            n_timestamp (int, optional): The number of timestamps for the time
+                                    evolution plot.
                                     If None, the number is determined automatically.
-            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude.
+            exclude_time_range (list, optional): A specific time window [start, end]
+                                                in minutes to exclude.
         """
         MCA_range = MCA_range if MCA_range is not None else self.SELECTED_MCA_RANGE
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
@@ -260,8 +285,10 @@ class RadonAnalysis:
             axs[1].set_ylabel("Energy [keV]")
             axs[0].set_xlabel("Energy [keV]")
             _MCA_range = [
-                (self.DEFAULT_MCA_RANGE[0] - self.energy_calibration[1]) / self.energy_calibration[0],
-                (self.DEFAULT_MCA_RANGE[1] - self.energy_calibration[1]) / self.energy_calibration[0],
+                (self.DEFAULT_MCA_RANGE[0] - self.energy_calibration[1])
+                / self.energy_calibration[0],
+                (self.DEFAULT_MCA_RANGE[1] - self.energy_calibration[1])
+                / self.energy_calibration[0],
             ]
         else:
             label = f"Time evolution in {MCA_range} MCA ch"
@@ -270,10 +297,16 @@ class RadonAnalysis:
             _MCA_range = self.DEFAULT_MCA_RANGE
 
         data, mcas = self.get_mca_histogram(
-            MCA_range=_MCA_range, time_range=time_range, n_mca=n_mca, exclude_time_range=exclude_time_range
+            MCA_range=_MCA_range,
+            time_range=time_range,
+            n_mca=n_mca,
+            exclude_time_range=exclude_time_range,
         )
         times, rate, rate_err = self.get_time_evolution(
-            MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp, exclude_time_range=exclude_time_range
+            MCA_range=MCA_range,
+            time_range=time_range,
+            n_timestamp=n_timestamp,
+            exclude_time_range=exclude_time_range,
         )
 
         # MCA histogram
@@ -288,12 +321,22 @@ class RadonAnalysis:
         # Scatter plot of runtime vs MCA channel
         axs[1].scatter(self.runtime, self.mca, s=3, color="black", alpha=0.3)
         axs[1].axvspan(0, time_range[0], color="grey", lw=0, alpha=0.5)
-        if time_range[1] != float('inf') and time_range[1] is not None:
-            axs[1].axvspan(time_range[1], max(self.runtime), color="grey", lw=0, alpha=0.5)
-            
+        if time_range[1] != float("inf") and time_range[1] is not None:
+            axs[1].axvspan(
+                time_range[1], max(self.runtime), color="grey", lw=0, alpha=0.5
+            )
+
         if exclude_time_range is not None:
-            axs[1].axvspan(exclude_time_range[0], exclude_time_range[1], color="red", lw=0, alpha=0.3, hatch='//', label="Excluded")
-            axs[1].legend(loc='upper right')
+            axs[1].axvspan(
+                exclude_time_range[0],
+                exclude_time_range[1],
+                color="red",
+                lw=0,
+                alpha=0.3,
+                hatch="//",
+                label="Excluded",
+            )
+            axs[1].legend(loc="upper right")
 
         axs[1].axhspan(*MCA_range, color="pink", lw=0, alpha=0.5)
         axs[1].set_xlabel("Runtime [minutes]")
@@ -336,16 +379,25 @@ class RadonAnalysis:
         """Generates an iminuit Minuit object for fitting the MCA spectrum.
 
         Args:
-            model (class/object): The model class containing a `total_model` method to fit the data.
+            model (class/object): The model class containing a `total_model`
+                                method to fit the data.
             init (dict): Initial guesses for the model parameters.
             limits (dict, optional): Parameter bounds for the fit. Defaults to None.
-            fixed (dict, optional): Boolean dictionary specifying which parameters to fix. Defaults to None.
-            MCA_range (list, optional): The range of MCA channels to include. Defaults to class SELECTED_MCA_RANGE.
-            time_range (list, optional): The range of time to include, in minutes. Defaults to class SELECTED_TIME_RANGE.
-            MCA_counts_limit (int, optional): Minimum threshold for bin counts to include in the fit. Defaults to 5.
-            n_mca (int, optional): The number of channels for the histogram. If None, determined automatically.
-            prefit (bool, optional): If True, uses scipy.optimize.curve_fit to derive initial values before using Minuit. Defaults to True.
-            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude from the fit.
+            fixed (dict, optional): Boolean dictionary specifying which parameters
+                                to fix. Defaults to None.
+            MCA_range (list, optional): The range of MCA channels to include.
+                                    Defaults to class SELECTED_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes.
+                                        Defaults to class SELECTED_TIME_RANGE.
+            MCA_counts_limit (int, optional): Minimum threshold for bin counts
+                                            to include in the fit. Defaults to 5.
+            n_mca (int, optional): The number of channels for the histogram.
+                                If None, determined automatically.
+            prefit (bool, optional): If True, uses scipy.optimize.curve_fit to derive
+                                    initial values before using Minuit.
+                                    Defaults to True.
+            exclude_time_range (list, optional): A specific time window [start, end]
+                                    in minutes to exclude from the fit.
 
         Returns:
             iminuit.Minuit: The configured Minuit fitting object ready to be minimized.
@@ -354,10 +406,14 @@ class RadonAnalysis:
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
         data, mcas = self.get_mca_histogram(
-            MCA_range=MCA_range, time_range=time_range, n_mca=n_mca, exclude_time_range=exclude_time_range
+            MCA_range=MCA_range,
+            time_range=time_range,
+            n_mca=n_mca,
+            exclude_time_range=exclude_time_range,
         )
 
-        # Truncating data biases the tails. Consider dropping this limit in the future
+        # Truncating data biases the tails. Consider dropping this limit
+        # in the future
         # if you switch to a Poisson Maximum Likelihood cost function.
         mask = data > MCA_counts_limit
         _data = data[mask]
@@ -368,15 +424,15 @@ class RadonAnalysis:
         if prefit:
             print("Prefit with scipy for deriving initial values...")
             _bounds = self._prepare_bounds_for_fit(model, init, fixed, limits)
-            
+
             # Protect against 0 counts causing division-by-zero in weights
             _sigma = np.maximum(np.sqrt(_data), 1)
-            
+
             try:
                 # Suppress scipy optimize warnings so they don't flood the terminal
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    
+
                     _pre_init, _init_cov = curve_fit(
                         model.total_model,
                         _mcas,
@@ -387,25 +443,29 @@ class RadonAnalysis:
                         maxfev=500000,
                         bounds=_bounds,
                     )
-                
+
                 # Only overwrite initial values if covariance is valid
                 if not np.isinf(_init_cov).any():
                     _init = _pre_init
                     _init_err = np.sqrt(np.diag(_init_cov))
                     self.print_table(_parameter_names, _init, _init_err)
                 else:
-                    print("Prefit converged but covariance is infinite. Falling back to manual init.")
-                    
+                    print(
+                        "Prefit converged but covariance is infinite. "
+                        "Falling back to manual init."
+                    )
+
             except RuntimeError:
                 print("Prefit failed to converge. Falling back to manual init.")
 
-        # Note: For low background spectra, consider cost.ExtendedBinnedNLL in the future
+        # Note: For low background spectra, consider cost.ExtendedBinnedNLL
+        # in the future
         cost_function = cost.LeastSquares(
             _mcas, _data, np.maximum(np.sqrt(_data), 1), model.total_model
         )
-        
+
         m = Minuit(cost_function, *_init)
-        
+
         # Cleaned up dictionary iteration
         if limits:
             for k, v in limits.items():
@@ -413,9 +473,9 @@ class RadonAnalysis:
         if fixed:
             for k, v in fixed.items():
                 m.fixed[k] = v
-                
+
         return m
-    
+
     def get_time_evolution_fitting_object(
         self,
         model,
@@ -432,16 +492,25 @@ class RadonAnalysis:
         """Generates an iminuit Minuit object for fitting the time evolution data.
 
         Args:
-            model (class/object): The model class containing a `total_model` method to fit the data.
+            model (class/object): The model class containing a `total_model`
+                                method to fit the data.
             init (dict): Initial guesses for the model parameters.
             limits (dict, optional): Parameter bounds for the fit. Defaults to None.
-            fixed (dict, optional): Boolean dictionary specifying which parameters to fix. Defaults to None.
-            MCA_range (list, optional): The range of MCA channels to include. Defaults to class SELECTED_MCA_RANGE.
-            time_range (list, optional): The range of time to include, in minutes. Defaults to class SELECTED_TIME_RANGE.
-            n_timestamp (int, optional): The number of timestamps for the histogram. If None, determined automatically.
-            rate_limit (float, optional): Minimum threshold for the rate to include in the fit. Defaults to 0.
-            prefit (bool, optional): If True, uses scipy.optimize.curve_fit to derive initial values before using Minuit. Defaults to True.
-            exclude_time_range (list, optional): A specific time window [start, end] in minutes to exclude from the fit.
+            fixed (dict, optional): Boolean dictionary specifying which parameters
+                                    to fix. Defaults to None.
+            MCA_range (list, optional): The range of MCA channels to include.
+                                        Defaults to class SELECTED_MCA_RANGE.
+            time_range (list, optional): The range of time to include, in minutes.
+                                        Defaults to class SELECTED_TIME_RANGE.
+            n_timestamp (int, optional): The number of timestamps for the histogram.
+                                        If None, determined automatically.
+            rate_limit (float, optional): Minimum threshold for the rate to include
+                                            in the fit. Defaults to 0.
+            prefit (bool, optional): If True, uses scipy.optimize.curve_fit to derive
+                                    initial values before using Minuit.
+                                    Defaults to True.
+            exclude_time_range (list, optional): A specific time window [start, end]
+                                                in minutes to exclude from the fit.
 
         Returns:
             iminuit.Minuit: The configured Minuit fitting object ready to be minimized.
@@ -450,7 +519,10 @@ class RadonAnalysis:
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
 
         times, rate, rate_err = self.get_time_evolution(
-            MCA_range=MCA_range, time_range=time_range, n_timestamp=n_timestamp, exclude_time_range=exclude_time_range
+            MCA_range=MCA_range,
+            time_range=time_range,
+            n_timestamp=n_timestamp,
+            exclude_time_range=exclude_time_range,
         )
 
         mask = rate > rate_limit
@@ -461,31 +533,55 @@ class RadonAnalysis:
         _parameter_names, _init = self._prepare_init_for_fit(model, init)
 
         if prefit:
-            print("Prefit with scipy for deriving inital values")
+            print("Prefit with scipy for deriving initial values...")
             _bounds = self._prepare_bounds_for_fit(model, init, fixed, limits)
-            _init, _init_cov = curve_fit(
-                model.total_model,
-                _times,
-                _rate,
-                sigma=_rate_err,
-                absolute_sigma=True,
-                p0=_init,
-                maxfev=500000,
-                bounds=_bounds,
-            )
-            _init_err = np.sqrt(np.diag(_init_cov))
-            self.print_table(_parameter_names, _init, _init_err)
+
+            # Protect against 0 error causing division-by-zero in weights
+            _sigma = np.maximum(_rate_err, 1e-10)
+
+            try:
+                # Suppress scipy optimize warnings so they don't flood the terminal
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+
+                    _pre_init, _init_cov = curve_fit(
+                        model.total_model,
+                        _times,
+                        _rate,
+                        sigma=_sigma,
+                        absolute_sigma=True,
+                        p0=_init,
+                        maxfev=500000,
+                        bounds=_bounds,
+                    )
+
+                # Only overwrite initial values if covariance is valid
+                if not np.isinf(_init_cov).any():
+                    _init = _pre_init
+                    _init_err = np.sqrt(np.diag(_init_cov))
+                    self.print_table(_parameter_names, _init, _init_err)
+                else:
+                    print(
+                        "Prefit converged but covariance is infinite. "
+                        "Falling back to manual init."
+                    )
+
+            except RuntimeError:
+                print("Prefit failed to converge. Falling back to manual init.")
 
         cost_function = cost.LeastSquares(_times, _rate, _rate_err, model.total_model)
         m = Minuit(cost_function, *_init)
-        if limits is not None:
-            for k in limits.keys():
-                m.limits[k] = limits[k]
-        if fixed is not None:
-            for k in fixed.keys():
-                m.fixed[k] = fixed[k]
+
+        # Cleaned up dictionary iteration
+        if limits:
+            for k, v in limits.items():
+                m.limits[k] = v
+        if fixed:
+            for k, v in fixed.items():
+                m.fixed[k] = v
+
         return m
-    
+
     def get_livetime(self, time_range=None, exclude_time_range=None):
         """Calculates the total livetime in minutes for the specified ranges,
         accounting for any excluded time windows.
@@ -493,35 +589,35 @@ class RadonAnalysis:
         Args:
             time_range (list, optional): The time window [start, end] in minutes.
             Defaults to class SELECTED_TIME_RANGE.
-            exclude_time_range (list, optional): A specific time window [start, end] 
+            exclude_time_range (list, optional): A specific time window [start, end]
             in minutes to exclude.
         Returns:
             float: Total valid livetime in minutes.
         """
         time_range = time_range if time_range is not None else self.SELECTED_TIME_RANGE
-        
+
         if len(self.runtime) == 0:
             return 0.0
 
         # Define the absolute start and end based on the data and provided limits
         t_start = max(time_range[0], self.runtime.min())
         t_end = min(time_range[1], self.runtime.max())
-        
+
         # If the start is after the end (invalid range), livetime is 0
         if t_start >= t_end:
             return 0.0
-            
+
         livetime = t_end - t_start
-        
+
         # Subtract the excluded time if it overlaps with our active window
         if exclude_time_range is not None:
             excl_start = max(t_start, exclude_time_range[0])
             excl_end = min(t_end, exclude_time_range[1])
-            
+
             # If the excluded range falls inside our window, subtract it
             if excl_start < excl_end:
-                livetime -= (excl_end - excl_start)
-                
+                livetime -= excl_end - excl_start
+
         return livetime
 
     @staticmethod
@@ -553,12 +649,12 @@ class RadonAnalysis:
 
     @staticmethod
     def _scrape_radon_db(url):
-        # Sends a GET request to the specified URL and parses the content 
+        # Sends a GET request to the specified URL and parses the content
         # using BeautifulSoup.
         RadonAnalysis._radon_db_name_format(url)
         page = requests.get(url).text
         soup = BeautifulSoup(page, "html.parser")
-        # Returns a list of URLs, appending the href attribute of each <a> tag 
+        # Returns a list of URLs, appending the href attribute of each <a> tag
         # that ends with '.root' to the base URL.
         return [
             url + node.get("href")
@@ -568,10 +664,10 @@ class RadonAnalysis:
 
     @staticmethod
     def _prepare_init_for_fit(Model, init):
-        # Retrieves the names of the parameters (excluding 'self') of 
+        # Retrieves the names of the parameters (excluding 'self') of
         # the Model's constructor.
         parameter_names = list(inspect.signature(Model).parameters.keys())[1:]
-        # Returns a list of initial values for these parameters based 
+        # Returns a list of initial values for these parameters based
         # on the provided 'init' dictionary.
         return parameter_names, [init[p] for p in parameter_names]
 
@@ -585,7 +681,7 @@ class RadonAnalysis:
         upper_bound=np.inf,
         epsilon=1e-9,
     ):
-        # Retrieves the names of the parameters (excluding 'x') of 
+        # Retrieves the names of the parameters (excluding 'x') of
         # the model's function.
         parameter_names = list(inspect.signature(model).parameters.keys())[1:]
         bounds = []
@@ -594,7 +690,7 @@ class RadonAnalysis:
         _limits = limits or {}
         _fixed = fixed or {}
 
-        # Creates bounds for each parameter based on whether it is fixed 
+        # Creates bounds for each parameter based on whether it is fixed
         # (using 'epsilon' for tight bounds)
         # or if it is specified in limits
         # or free (using provided 'lower_bound' and 'upper_bound')
@@ -603,21 +699,21 @@ class RadonAnalysis:
                 bounds.append((init[p] - epsilon, init[p] + epsilon))
             elif p in _limits.keys():
                 lb = -np.inf if _limits[p][0] is None else _limits[p][0]
-                ub =  np.inf if _limits[p][1] is None else _limits[p][1]
+                ub = np.inf if _limits[p][1] is None else _limits[p][1]
                 bounds.append((lb, ub))
                 # bounds.append((_limits[p][0], _limits[p][1]))
             else:
                 bounds.append((lower_bound, upper_bound))
-        # Separates the bounds into two lists: one for lower bounds 
+        # Separates the bounds into two lists: one for lower bounds
         # and one for upper bounds.
         # Unzip the pairs into two lists
-        lower_bounds, upper_bounds = zip(*bounds)  
+        lower_bounds, upper_bounds = zip(*bounds)
         return lower_bounds, upper_bounds
 
     @staticmethod
     def print_table(_parameter_names, _init, _init_err):
         print(f"{'| Parameters':12} | {'Value':11} | {'Error':11} |")
         print("-" * 42)
-        for l, i, j in zip(_parameter_names, _init, _init_err):
-            print(f"| {l:10} | {i:11.3f} | {j:11.3f} |")
+        for k, i, j in zip(_parameter_names, _init, _init_err):
+            print(f"| {k:10} | {i:11.3f} | {j:11.3f} |")
         print("-" * 42)

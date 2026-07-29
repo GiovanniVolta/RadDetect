@@ -24,7 +24,8 @@ class MonAlphaDetectorGeometricalEfficiency:
     Methods:
         generate_positions(): Generates the initial positions of the alpha particles.
         generate_directions(): Generates the initial directions of the alpha particles.
-        calculate_intersections(positions, directions): Calculates the intersections of alpha particles with the detection plane.
+        calculate_intersections(positions, directions): Calculates the intersections
+        of alpha particles with the detection plane.
         check_diode_hit(intersections): Checks if the alpha particles hit the diode.
         run_simulation(): Runs the simulation and prints the completion message.
     """
@@ -107,12 +108,16 @@ class MonAlphaDetectorGeometricalEfficiency:
     def calculate_plane_intersection(self, vec_a, vec_b, vec_c, vec_d, vec_e):
         """
         Calculates the intersection of particle trajectories with a given plane.
-        Get the line of flight here \vec{a} is a point on the line (starting points)
-        and \vec{b} is the vector giving the emmission direction
-        1) Get the equation \vec{x} = \vec{a} + g*\vec{b} describing the line of flight of this ion
-        2) Find the intersection of this line with the "ceiling plane" \vec{y} = \vec{c}+h*\vec{d}+i*\vec{e}
-        To find the intersection, we have to set \vec{x} = \vec{y} and find the values
-        for parameters g, h and i. This is done by solving the system of linear equations
+        Get the line of flight here vec{a} is a point on the line (starting points)
+        and vec{b} is the vector giving the emmission direction
+        1) Get the equation vec{x} = vec{a} + g*vec{b} describing the line
+        of flight of this ion
+        2) Find the intersection of this line with the "ceiling plane"
+        vec{y} = vec{c}+h*vec{d}+i*vec{e}
+        To find the intersection, we have to set vec{x} = vec{y}
+        and find the values
+        for parameters g, h and i. This is done by solving the system
+        of linear equations
         """
 
         rhs = vec_c - vec_a
@@ -121,7 +126,8 @@ class MonAlphaDetectorGeometricalEfficiency:
         return solutions
 
     def calculate_intersections(self, positions, directions):
-        """Calculates the intersections of the alpha particles with the detection plane.
+        """Calculates the intersections of the alpha particles with
+        the detection plane.
 
         Look if the intersection point is inside the diode
         """
@@ -194,6 +200,7 @@ class MonAlphaDetectorGeometricalEfficiency:
         print(f"Disance Sample - Diode: {self.DIST_SAMP_DIODE} mm")
         print(f"Detection Efficiency: {self.detection_efficiency * 100:.2f}%")
         print(
-            f"Statistical Uncertainty: {self.detection_efficiency_stat_uncert * 100:.2f}%"
+            "Statistical Uncertainty: "
+            f"{self.detection_efficiency_stat_uncert * 100:.2f}%"
         )
         print("Simulation complete.")
