@@ -1,9 +1,7 @@
-import warnings
-
 import numpy as np
+import warnings
+from scipy.stats import crystalball, skewnorm, norm, exponnorm
 from iminuit import Minuit
-from scipy.stats import crystalball, norm, skewnorm
-
 
 def _warn_if_multiple_modes(mode, peak_name):
     """Internal helper to check active modes and raise a warning if > 1.
@@ -12,7 +10,24 @@ def _warn_if_multiple_modes(mode, peak_name):
         mode (str or list): The mode(s) activated for the peak.
         peak_name (str): Identifier for the peak to display in the warning.
     """
-    active_modes = [m for m in ["cb", "sg", "norm"] if m in mode]
+    active_modes = []
+    
+    if "cb_exp" in mode:
+        active_modes.append("cb_exp")
+        
+    # Prevent the "cb" inside "cb_exp" from causing a false positive
+    if isinstance(mode, str):
+        if "cb" in mode.replace("cb_exp", ""):
+            active_modes.append("cb")
+    else:
+        if "cb" in mode:
+            active_modes.append("cb")
+            
+    if "sg" in mode:
+        active_modes.append("sg")
+    if "norm" in mode:
+        active_modes.append("norm")
+
     if len(active_modes) > 1:
         warnings.warn(
             f"Multiple modes {active_modes} are active for {peak_name}. "
@@ -22,7 +37,6 @@ def _warn_if_multiple_modes(mode, peak_name):
             UserWarning,
             stacklevel=3,
         )
-
 
 class SinglePeak:
     """Functor model for fitting a single alpha peak with an optional flat background.
@@ -39,9 +53,10 @@ class SinglePeak:
 
         # Route the evaluation functions ONCE during initialization
         self._calc_bkg = self._eval_bkg if self.use_bkg else self._eval_zero
-        self._calc_cb = self._eval_cb if "cb" in self.peak_mode else self._eval_zero
+        self._calc_cb = self._eval_cb if "cb" in self.peak_mode and "cb_exp" not in self.peak_mode else self._eval_zero
         self._calc_sg = self._eval_sg if "sg" in self.peak_mode else self._eval_zero
         self._calc_n = self._eval_norm if "norm" in self.peak_mode else self._eval_zero
+        self._calc_cbe = self._eval_cbe if "cb_exp" in self.peak_mode else self._eval_zero
 
     def _eval_zero(self, x, *args):
         """Catch-all for disabled components; absorbs unused parameters via *args."""
@@ -59,6 +74,17 @@ class SinglePeak:
     def _eval_norm(self, x, loc, scale, A):
         return A * norm.pdf(x, loc=loc, scale=scale)
 
+    def _eval_cbe(self, x, beta, m, loc, scale, tau, f_tail, A):
+        # According to GEMINI CB+E
+        # In scipy.stats.exponnorm, the shape parameter K = 1 / (lambda * scale).
+        # Since mean of exponential is 1/lambda = tau, we have K = tau / scale.
+        K = tau / scale 
+        
+        cb_part = crystalball.pdf(x, beta, m, loc=loc, scale=scale)
+        exp_part = exponnorm.pdf(x, K, loc=loc, scale=scale)
+        
+        return A * ((1.0 - f_tail) * cb_part + f_tail * exp_part)
+
     def total_model(
         self,
         x,
@@ -75,6 +101,13 @@ class SinglePeak:
         loc_n,
         scale_n,
         A_n,
+        beta_cbe,
+        m_cbe,
+        loc_cbe,
+        scale_cbe,
+        tau_cbe,
+        f_cbe,
+        A_cbe
     ):
         """Evaluates the model array.
 
@@ -85,8 +118,9 @@ class SinglePeak:
         self.cb = self._calc_cb(x, beta_cb, m_cb, loc_cb, scale_cb, A_cb)
         self.sg = self._calc_sg(x, a_sg, loc_sg, scale_sg, A_sg)
         self.n = self._calc_n(x, loc_n, scale_n, A_n)
+        self.cbe = self._calc_cbe(x, beta_cbe, m_cbe, loc_cbe, scale_cbe, tau_cbe, f_cbe, A_cbe)
 
-        self.peak = self.cb + self.sg + self.n
+        self.peak = self.cb + self.sg + self.n + self.cbe
 
         # Sum them up
         self.total = self.bkg_term + self.peak
@@ -99,23 +133,19 @@ class SinglePeak:
     def prepare_fit_args(self, p_cfg):
         """Parses a master parameter config dictionary and auto-fixes parameters for
         components that are disabled in this instance.
-
-        Parameters:
-            p_cfg (dict): Dictionary where values are (init, fixed, limits).
-
-        Returns:
-            tuple: (init_dict, fixed_dict, limits_dict)
         """
         init = {k: v[0] for k, v in p_cfg.items()}
         fixed = {k: v[1] for k, v in p_cfg.items()}
         limits = {k: v[2] for k, v in p_cfg.items()}
 
-        if "cb" not in self.peak_mode:
-            fixed.update({k: True for k in fixed if "_cb" in k})
+        if "cb" not in self.peak_mode or "cb_exp" in self.peak_mode:
+            fixed.update({k: True for k in fixed if "_cb" in k and "_cbe" not in k})
         if "sg" not in self.peak_mode:
             fixed.update({k: True for k in fixed if "_sg" in k})
         if "norm" not in self.peak_mode:
             fixed.update({k: True for k in fixed if "_n" in k})
+        if "cb_exp" not in self.peak_mode:
+            fixed.update({k: True for k in fixed if "_cbe" in k})
 
         if not self.use_bkg:
             fixed["bkg"] = True
@@ -124,19 +154,17 @@ class SinglePeak:
         return init, fixed, limits
 
     def extract_params(self, m: Minuit):
-        """Extracts the location and scale parameters for the active
-        shape from a fitted
-        Minuit object.
-
-        Parameters:
-            m (Minuit): The iminuit object containing the completed fit.
-
-        Returns:
-            tuple: (loc, loc_err, scale, scale_err)
-        """
+        """Extracts the location and scale parameters for the active shape."""
         if not m.valid:
             warnings.warn("Extracting parameters from an invalid fit.")
 
+        if "cb_exp" in self.peak_mode:
+            return (
+                m.values["loc_cbe"],
+                m.errors["loc_cbe"],
+                m.values["scale_cbe"],
+                m.errors["scale_cbe"],
+            )
         if "cb" in self.peak_mode:
             return (
                 m.values["loc_cb"],
@@ -196,7 +224,7 @@ class DoublePeak:
         # Peak 1 routing
         self._calc_cb_1 = (
             self._eval_cb
-            if ("cb" in self.peak1_mode and self.use_peak1)
+            if ("cb" in self.peak1_mode and "cb_exp" not in self.peak1_mode and self.use_peak1)
             else self._eval_zero
         )
         self._calc_sg_1 = (
@@ -209,11 +237,16 @@ class DoublePeak:
             if ("norm" in self.peak1_mode and self.use_peak1)
             else self._eval_zero
         )
+        self._calc_cbe_1 = (
+            self._eval_cbe
+            if ("cb_exp" in self.peak1_mode and self.use_peak1)
+            else self._eval_zero
+        )
 
         # Peak 2 routing
         self._calc_cb_2 = (
             self._eval_cb
-            if ("cb" in self.peak2_mode and self.use_peak2)
+            if ("cb" in self.peak2_mode and "cb_exp" not in self.peak2_mode and self.use_peak2)
             else self._eval_zero
         )
         self._calc_sg_2 = (
@@ -224,6 +257,11 @@ class DoublePeak:
         self._calc_n_2 = (
             self._eval_norm
             if ("norm" in self.peak2_mode and self.use_peak2)
+            else self._eval_zero
+        )
+        self._calc_cbe_2 = (
+            self._eval_cbe
+            if ("cb_exp" in self.peak2_mode and self.use_peak2)
             else self._eval_zero
         )
 
@@ -243,34 +281,27 @@ class DoublePeak:
     def _eval_norm(self, x, loc, scale, A):
         return A * norm.pdf(x, loc=loc, scale=scale)
 
+    def _eval_cbe(self, x, beta, m, loc, scale, tau, f_tail, A):
+        """Crystal Ball + Exponential tail."""
+        K = tau / scale 
+        cb_part = crystalball.pdf(x, beta, m, loc=loc, scale=scale)
+        exp_part = exponnorm.pdf(x, K, loc=loc, scale=scale)
+        return A * ((1.0 - f_tail) * cb_part + f_tail * exp_part)
+
     def total_model(
         self,
         x,
         bkg,
-        beta_cb_1,
-        m_cb_1,
-        loc_cb_1,
-        scale_cb_1,
-        A_cb_1,
-        a_sg_1,
-        loc_sg_1,
-        scale_sg_1,
-        A_sg_1,
-        loc_n_1,
-        scale_n_1,
-        A_n_1,
-        beta_cb_2,
-        m_cb_2,
-        loc_cb_2,
-        scale_cb_2,
-        A_cb_2,
-        a_sg_2,
-        loc_sg_2,
-        scale_sg_2,
-        A_sg_2,
-        loc_n_2,
-        scale_n_2,
-        A_n_2,
+        # Peak 1 parameters
+        beta_cb_1, m_cb_1, loc_cb_1, scale_cb_1, A_cb_1,
+        a_sg_1, loc_sg_1, scale_sg_1, A_sg_1,
+        loc_n_1, scale_n_1, A_n_1,
+        beta_cbe_1, m_cbe_1, loc_cbe_1, scale_cbe_1, tau_cbe_1, f_cbe_1, A_cbe_1,
+        # Peak 2 parameters
+        beta_cb_2, m_cb_2, loc_cb_2, scale_cb_2, A_cb_2,
+        a_sg_2, loc_sg_2, scale_sg_2, A_sg_2,
+        loc_n_2, scale_n_2, A_n_2,
+        beta_cbe_2, m_cbe_2, loc_cbe_2, scale_cbe_2, tau_cbe_2, f_cbe_2, A_cbe_2,
     ):
         """Evaluates the double peak model array.
 
@@ -282,13 +313,15 @@ class DoublePeak:
         self.cb_1 = self._calc_cb_1(x, beta_cb_1, m_cb_1, loc_cb_1, scale_cb_1, A_cb_1)
         self.sg_1 = self._calc_sg_1(x, a_sg_1, loc_sg_1, scale_sg_1, A_sg_1)
         self.n_1 = self._calc_n_1(x, loc_n_1, scale_n_1, A_n_1)
-        self.peak1 = self.cb_1 + self.sg_1 + self.n_1
+        self.cbe_1 = self._calc_cbe_1(x, beta_cbe_1, m_cbe_1, loc_cbe_1, scale_cbe_1, tau_cbe_1, f_cbe_1, A_cbe_1)
+        self.peak1 = self.cb_1 + self.sg_1 + self.n_1 + self.cbe_1
 
         # Evaluate Peak 2
         self.cb_2 = self._calc_cb_2(x, beta_cb_2, m_cb_2, loc_cb_2, scale_cb_2, A_cb_2)
         self.sg_2 = self._calc_sg_2(x, a_sg_2, loc_sg_2, scale_sg_2, A_sg_2)
         self.n_2 = self._calc_n_2(x, loc_n_2, scale_n_2, A_n_2)
-        self.peak2 = self.cb_2 + self.sg_2 + self.n_2
+        self.cbe_2 = self._calc_cbe_2(x, beta_cbe_2, m_cbe_2, loc_cbe_2, scale_cbe_2, tau_cbe_2, f_cbe_2, A_cbe_2)
+        self.peak2 = self.cb_2 + self.sg_2 + self.n_2 + self.cbe_2
 
         # Sum total
         self.total = self.bkg_term + self.peak1 + self.peak2
@@ -301,32 +334,30 @@ class DoublePeak:
     def prepare_fit_args(self, p_cfg):
         """Parses a master parameter config dictionary and auto-fixes parameters for
         components that are disabled in this instance.
-
-        Parameters:
-            p_cfg (dict): Dictionary where values are (init, fixed, limits).
-
-        Returns:
-            tuple: (init_dict, fixed_dict, limits_dict)
         """
         init = {k: v[0] for k, v in p_cfg.items()}
         fixed = {k: v[1] for k, v in p_cfg.items()}
         limits = {k: v[2] for k, v in p_cfg.items()}
 
         # Peak 1 components
-        if "cb" not in self.peak1_mode or not self.use_peak1:
-            fixed.update({k: True for k in fixed if "_cb_1" in k})
+        if ("cb" not in self.peak1_mode or "cb_exp" in self.peak1_mode) or not self.use_peak1:
+            fixed.update({k: True for k in fixed if "_cb_1" in k and "_cbe_1" not in k})
         if "sg" not in self.peak1_mode or not self.use_peak1:
             fixed.update({k: True for k in fixed if "_sg_1" in k})
         if "norm" not in self.peak1_mode or not self.use_peak1:
             fixed.update({k: True for k in fixed if "_n_1" in k})
+        if "cb_exp" not in self.peak1_mode or not self.use_peak1:
+            fixed.update({k: True for k in fixed if "_cbe_1" in k})
 
         # Peak 2 components
-        if "cb" not in self.peak2_mode or not self.use_peak2:
-            fixed.update({k: True for k in fixed if "_cb_2" in k})
+        if ("cb" not in self.peak2_mode or "cb_exp" in self.peak2_mode) or not self.use_peak2:
+            fixed.update({k: True for k in fixed if "_cb_2" in k and "_cbe_2" not in k})
         if "sg" not in self.peak2_mode or not self.use_peak2:
             fixed.update({k: True for k in fixed if "_sg_2" in k})
         if "norm" not in self.peak2_mode or not self.use_peak2:
             fixed.update({k: True for k in fixed if "_n_2" in k})
+        if "cb_exp" not in self.peak2_mode or not self.use_peak2:
+            fixed.update({k: True for k in fixed if "_cbe_2" in k})
 
         # Background
         if not self.use_bkg:
@@ -342,6 +373,13 @@ class DoublePeak:
         if not self.use_peak1:
             raise ValueError("Peak 1 is disabled.")
 
+        if "cb_exp" in self.peak1_mode:
+            return (
+                m.values["loc_cbe_1"],
+                m.errors["loc_cbe_1"],
+                m.values["scale_cbe_1"],
+                m.errors["scale_cbe_1"],
+            )
         if "cb" in self.peak1_mode:
             return (
                 m.values["loc_cb_1"],
@@ -373,6 +411,13 @@ class DoublePeak:
         if not self.use_peak2:
             raise ValueError("Peak 2 is disabled.")
 
+        if "cb_exp" in self.peak2_mode:
+            return (
+                m.values["loc_cbe_2"],
+                m.errors["loc_cbe_2"],
+                m.values["scale_cbe_2"],
+                m.errors["scale_cbe_2"],
+            )
         if "cb" in self.peak2_mode:
             return (
                 m.values["loc_cb_2"],
@@ -438,7 +483,7 @@ class TriplePeak:
         # Peak 1 routing
         self._calc_cb_1 = (
             self._eval_cb
-            if ("cb" in self.peak1_mode and self.use_peak1)
+            if ("cb" in self.peak1_mode and "cb_exp" not in self.peak1_mode and self.use_peak1)
             else self._eval_zero
         )
         self._calc_sg_1 = (
@@ -451,11 +496,16 @@ class TriplePeak:
             if ("norm" in self.peak1_mode and self.use_peak1)
             else self._eval_zero
         )
+        self._calc_cbe_1 = (
+            self._eval_cbe
+            if ("cb_exp" in self.peak1_mode and self.use_peak1)
+            else self._eval_zero
+        )
 
         # Peak 2 routing
         self._calc_cb_2 = (
             self._eval_cb
-            if ("cb" in self.peak2_mode and self.use_peak2)
+            if ("cb" in self.peak2_mode and "cb_exp" not in self.peak2_mode and self.use_peak2)
             else self._eval_zero
         )
         self._calc_sg_2 = (
@@ -468,11 +518,16 @@ class TriplePeak:
             if ("norm" in self.peak2_mode and self.use_peak2)
             else self._eval_zero
         )
+        self._calc_cbe_2 = (
+            self._eval_cbe
+            if ("cb_exp" in self.peak2_mode and self.use_peak2)
+            else self._eval_zero
+        )
 
         # Peak 3 routing
         self._calc_cb_3 = (
             self._eval_cb
-            if ("cb" in self.peak3_mode and self.use_peak3)
+            if ("cb" in self.peak3_mode and "cb_exp" not in self.peak3_mode and self.use_peak3)
             else self._eval_zero
         )
         self._calc_sg_3 = (
@@ -483,6 +538,11 @@ class TriplePeak:
         self._calc_n_3 = (
             self._eval_norm
             if ("norm" in self.peak3_mode and self.use_peak3)
+            else self._eval_zero
+        )
+        self._calc_cbe_3 = (
+            self._eval_cbe
+            if ("cb_exp" in self.peak3_mode and self.use_peak3)
             else self._eval_zero
         )
 
@@ -502,46 +562,32 @@ class TriplePeak:
     def _eval_norm(self, x, loc, scale, A):
         return A * norm.pdf(x, loc=loc, scale=scale)
 
+    def _eval_cbe(self, x, beta, m, loc, scale, tau, f_tail, A):
+        """Crystal Ball + Exponential tail."""
+        K = tau / scale 
+        cb_part = crystalball.pdf(x, beta, m, loc=loc, scale=scale)
+        exp_part = exponnorm.pdf(x, K, loc=loc, scale=scale)
+        return A * ((1.0 - f_tail) * cb_part + f_tail * exp_part)
+
     def total_model(
         self,
         x,
         bkg,
-        beta_cb_1,
-        m_cb_1,
-        loc_cb_1,
-        scale_cb_1,
-        A_cb_1,
-        a_sg_1,
-        loc_sg_1,
-        scale_sg_1,
-        A_sg_1,
-        loc_n_1,
-        scale_n_1,
-        A_n_1,
-        beta_cb_2,
-        m_cb_2,
-        loc_cb_2,
-        scale_cb_2,
-        A_cb_2,
-        a_sg_2,
-        loc_sg_2,
-        scale_sg_2,
-        A_sg_2,
-        loc_n_2,
-        scale_n_2,
-        A_n_2,
-        beta_cb_3,
-        m_cb_3,
-        loc_cb_3,
-        scale_cb_3,
-        A_cb_3,
-        a_sg_3,
-        loc_sg_3,
-        scale_sg_3,
-        A_sg_3,
-        loc_n_3,
-        scale_n_3,
-        A_n_3,
+        # Peak 1 parameters
+        beta_cb_1, m_cb_1, loc_cb_1, scale_cb_1, A_cb_1,
+        a_sg_1, loc_sg_1, scale_sg_1, A_sg_1,
+        loc_n_1, scale_n_1, A_n_1,
+        beta_cbe_1, m_cbe_1, loc_cbe_1, scale_cbe_1, tau_cbe_1, f_cbe_1, A_cbe_1,
+        # Peak 2 parameters
+        beta_cb_2, m_cb_2, loc_cb_2, scale_cb_2, A_cb_2,
+        a_sg_2, loc_sg_2, scale_sg_2, A_sg_2,
+        loc_n_2, scale_n_2, A_n_2,
+        beta_cbe_2, m_cbe_2, loc_cbe_2, scale_cbe_2, tau_cbe_2, f_cbe_2, A_cbe_2,
+        # Peak 3 parameters
+        beta_cb_3, m_cb_3, loc_cb_3, scale_cb_3, A_cb_3,
+        a_sg_3, loc_sg_3, scale_sg_3, A_sg_3,
+        loc_n_3, scale_n_3, A_n_3,
+        beta_cbe_3, m_cbe_3, loc_cbe_3, scale_cbe_3, tau_cbe_3, f_cbe_3, A_cbe_3,
     ):
         """Evaluates the triple peak model array.
 
@@ -553,19 +599,22 @@ class TriplePeak:
         self.cb_1 = self._calc_cb_1(x, beta_cb_1, m_cb_1, loc_cb_1, scale_cb_1, A_cb_1)
         self.sg_1 = self._calc_sg_1(x, a_sg_1, loc_sg_1, scale_sg_1, A_sg_1)
         self.n_1 = self._calc_n_1(x, loc_n_1, scale_n_1, A_n_1)
-        self.peak1 = self.cb_1 + self.sg_1 + self.n_1
+        self.cbe_1 = self._calc_cbe_1(x, beta_cbe_1, m_cbe_1, loc_cbe_1, scale_cbe_1, tau_cbe_1, f_cbe_1, A_cbe_1)
+        self.peak1 = self.cb_1 + self.sg_1 + self.n_1 + self.cbe_1
 
         # Evaluate Peak 2
         self.cb_2 = self._calc_cb_2(x, beta_cb_2, m_cb_2, loc_cb_2, scale_cb_2, A_cb_2)
         self.sg_2 = self._calc_sg_2(x, a_sg_2, loc_sg_2, scale_sg_2, A_sg_2)
         self.n_2 = self._calc_n_2(x, loc_n_2, scale_n_2, A_n_2)
-        self.peak2 = self.cb_2 + self.sg_2 + self.n_2
+        self.cbe_2 = self._calc_cbe_2(x, beta_cbe_2, m_cbe_2, loc_cbe_2, scale_cbe_2, tau_cbe_2, f_cbe_2, A_cbe_2)
+        self.peak2 = self.cb_2 + self.sg_2 + self.n_2 + self.cbe_2
 
         # Evaluate Peak 3
         self.cb_3 = self._calc_cb_3(x, beta_cb_3, m_cb_3, loc_cb_3, scale_cb_3, A_cb_3)
         self.sg_3 = self._calc_sg_3(x, a_sg_3, loc_sg_3, scale_sg_3, A_sg_3)
         self.n_3 = self._calc_n_3(x, loc_n_3, scale_n_3, A_n_3)
-        self.peak3 = self.cb_3 + self.sg_3 + self.n_3
+        self.cbe_3 = self._calc_cbe_3(x, beta_cbe_3, m_cbe_3, loc_cbe_3, scale_cbe_3, tau_cbe_3, f_cbe_3, A_cbe_3)
+        self.peak3 = self.cb_3 + self.sg_3 + self.n_3 + self.cbe_3
 
         # Sum total
         self.total = self.bkg_term + self.peak1 + self.peak2 + self.peak3
@@ -578,40 +627,40 @@ class TriplePeak:
     def prepare_fit_args(self, p_cfg):
         """Parses a master parameter config dictionary and auto-fixes parameters for
         components that are disabled in this instance.
-
-        Parameters:
-            p_cfg (dict): Dictionary where values are (init, fixed, limits).
-
-        Returns:
-            tuple: (init_dict, fixed_dict, limits_dict)
         """
         init = {k: v[0] for k, v in p_cfg.items()}
         fixed = {k: v[1] for k, v in p_cfg.items()}
         limits = {k: v[2] for k, v in p_cfg.items()}
 
         # Peak 1 components
-        if "cb" not in self.peak1_mode or not self.use_peak1:
-            fixed.update({k: True for k in fixed if "_cb_1" in k})
+        if ("cb" not in self.peak1_mode or "cb_exp" in self.peak1_mode) or not self.use_peak1:
+            fixed.update({k: True for k in fixed if "_cb_1" in k and "_cbe_1" not in k})
         if "sg" not in self.peak1_mode or not self.use_peak1:
             fixed.update({k: True for k in fixed if "_sg_1" in k})
         if "norm" not in self.peak1_mode or not self.use_peak1:
             fixed.update({k: True for k in fixed if "_n_1" in k})
+        if "cb_exp" not in self.peak1_mode or not self.use_peak1:
+            fixed.update({k: True for k in fixed if "_cbe_1" in k})
 
         # Peak 2 components
-        if "cb" not in self.peak2_mode or not self.use_peak2:
-            fixed.update({k: True for k in fixed if "_cb_2" in k})
+        if ("cb" not in self.peak2_mode or "cb_exp" in self.peak2_mode) or not self.use_peak2:
+            fixed.update({k: True for k in fixed if "_cb_2" in k and "_cbe_2" not in k})
         if "sg" not in self.peak2_mode or not self.use_peak2:
             fixed.update({k: True for k in fixed if "_sg_2" in k})
         if "norm" not in self.peak2_mode or not self.use_peak2:
             fixed.update({k: True for k in fixed if "_n_2" in k})
+        if "cb_exp" not in self.peak2_mode or not self.use_peak2:
+            fixed.update({k: True for k in fixed if "_cbe_2" in k})
 
         # Peak 3 components
-        if "cb" not in self.peak3_mode or not self.use_peak3:
-            fixed.update({k: True for k in fixed if "_cb_3" in k})
+        if ("cb" not in self.peak3_mode or "cb_exp" in self.peak3_mode) or not self.use_peak3:
+            fixed.update({k: True for k in fixed if "_cb_3" in k and "_cbe_3" not in k})
         if "sg" not in self.peak3_mode or not self.use_peak3:
             fixed.update({k: True for k in fixed if "_sg_3" in k})
         if "norm" not in self.peak3_mode or not self.use_peak3:
             fixed.update({k: True for k in fixed if "_n_3" in k})
+        if "cb_exp" not in self.peak3_mode or not self.use_peak3:
+            fixed.update({k: True for k in fixed if "_cbe_3" in k})
 
         # Background
         if not self.use_bkg:
@@ -627,6 +676,13 @@ class TriplePeak:
         if not self.use_peak1:
             raise ValueError("Peak 1 is disabled.")
 
+        if "cb_exp" in self.peak1_mode:
+            return (
+                m.values["loc_cbe_1"],
+                m.errors["loc_cbe_1"],
+                m.values["scale_cbe_1"],
+                m.errors["scale_cbe_1"],
+            )
         if "cb" in self.peak1_mode:
             return (
                 m.values["loc_cb_1"],
@@ -658,6 +714,13 @@ class TriplePeak:
         if not self.use_peak2:
             raise ValueError("Peak 2 is disabled.")
 
+        if "cb_exp" in self.peak2_mode:
+            return (
+                m.values["loc_cbe_2"],
+                m.errors["loc_cbe_2"],
+                m.values["scale_cbe_2"],
+                m.errors["scale_cbe_2"],
+            )
         if "cb" in self.peak2_mode:
             return (
                 m.values["loc_cb_2"],
@@ -689,6 +752,13 @@ class TriplePeak:
         if not self.use_peak3:
             raise ValueError("Peak 3 is disabled.")
 
+        if "cb_exp" in self.peak3_mode:
+            return (
+                m.values["loc_cbe_3"],
+                m.errors["loc_cbe_3"],
+                m.values["scale_cbe_3"],
+                m.errors["scale_cbe_3"],
+            )
         if "cb" in self.peak3_mode:
             return (
                 m.values["loc_cb_3"],

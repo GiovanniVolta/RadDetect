@@ -1,4 +1,4 @@
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 # Explicitly import the submodules (using the 'as' alias to satisfy Ruff F401)
 from . import blumchen as blumchen
