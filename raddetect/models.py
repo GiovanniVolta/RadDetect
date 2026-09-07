@@ -3,6 +3,22 @@ import warnings
 from scipy.stats import crystalball, skewnorm, norm, exponnorm
 from iminuit import Minuit
 
+import inspect
+
+def _fill_missing_params(init, fixed, limits, all_param_names):
+    """Fills in any parameter required by total_model but missing from the
+    provided init/fixed/limits dicts, defaulting it to 0 and fixing it.
+
+    Mutates init, fixed, and limits in place.
+    """
+    for name in all_param_names:
+        if name not in init:
+            init[name] = 0.0
+            fixed[name] = True
+            limits[name] = (-np.inf, np.inf)
+            warnings.warn(f"Parameter '{name}' missing from p_cfg;"
+                        " defaulting to 0 and fixing it.")
+            
 def _warn_if_multiple_modes(mode, peak_name):
     """Internal helper to check active modes and raise a warning if > 1.
 
@@ -57,6 +73,10 @@ class SinglePeak:
         self._calc_sg = self._eval_sg if "sg" in self.peak_mode else self._eval_zero
         self._calc_n = self._eval_norm if "norm" in self.peak_mode else self._eval_zero
         self._calc_cbe = self._eval_cbe if "cb_exp" in self.peak_mode else self._eval_zero
+
+        # Full list of parameter names expected by total_model, excluding 'x'
+        sig = inspect.signature(self.total_model)
+        self._all_param_names = [p for p in sig.parameters if p != "x"]
 
     def _eval_zero(self, x, *args):
         """Catch-all for disabled components; absorbs unused parameters via *args."""
@@ -132,11 +152,14 @@ class SinglePeak:
 
     def prepare_fit_args(self, p_cfg):
         """Parses a master parameter config dictionary and auto-fixes parameters for
-        components that are disabled in this instance.
+        components that are disabled in this instance. Any parameter required by
+        total_model but missing from p_cfg is defaulted to 0 and fixed.
         """
         init = {k: v[0] for k, v in p_cfg.items()}
         fixed = {k: v[1] for k, v in p_cfg.items()}
         limits = {k: v[2] for k, v in p_cfg.items()}
+
+        _fill_missing_params(init, fixed, limits, self._all_param_names)
 
         if "cb" not in self.peak_mode or "cb_exp" in self.peak_mode:
             fixed.update({k: True for k in fixed if "_cb" in k and "_cbe" not in k})
@@ -265,6 +288,10 @@ class DoublePeak:
             else self._eval_zero
         )
 
+        # Full list of parameter names expected by total_model, excluding 'x'
+        sig = inspect.signature(self.total_model)
+        self._all_param_names = [p for p in sig.parameters if p != "x"]
+
     def _eval_zero(self, x, *args):
         """Catch-all for disabled components; absorbs extra parameters via *args."""
         return np.zeros_like(x, dtype=float)
@@ -333,11 +360,14 @@ class DoublePeak:
 
     def prepare_fit_args(self, p_cfg):
         """Parses a master parameter config dictionary and auto-fixes parameters for
-        components that are disabled in this instance.
+        components that are disabled in this instance. Any parameter required by
+        total_model but missing from p_cfg is defaulted to 0 and fixed.
         """
         init = {k: v[0] for k, v in p_cfg.items()}
         fixed = {k: v[1] for k, v in p_cfg.items()}
         limits = {k: v[2] for k, v in p_cfg.items()}
+
+        _fill_missing_params(init, fixed, limits, self._all_param_names)
 
         # Peak 1 components
         if ("cb" not in self.peak1_mode or "cb_exp" in self.peak1_mode) or not self.use_peak1:
@@ -441,8 +471,7 @@ class DoublePeak:
             )
 
         raise ValueError("No valid peak2_mode found.")
-
-
+    
 class TriplePeak:
     """Functor model for fitting three adjacent peaks with an optional flat background.
 
@@ -469,7 +498,6 @@ class TriplePeak:
         self.use_peak3 = use_peak3
         self.use_bkg = use_bkg
 
-        # Note: Assuming _warn_if_multiple_modes is defined elsewhere in your module
         if self.use_peak1:
             _warn_if_multiple_modes(self.peak1_mode, "Peak 1")
         if self.use_peak2:
@@ -545,6 +573,10 @@ class TriplePeak:
             if ("cb_exp" in self.peak3_mode and self.use_peak3)
             else self._eval_zero
         )
+
+        # Full list of parameter names expected by total_model, excluding 'x'
+        sig = inspect.signature(self.total_model)
+        self._all_param_names = [p for p in sig.parameters if p != "x"]
 
     def _eval_zero(self, x, *args):
         """Catch-all for disabled components; absorbs extra parameters via *args."""
@@ -626,11 +658,14 @@ class TriplePeak:
 
     def prepare_fit_args(self, p_cfg):
         """Parses a master parameter config dictionary and auto-fixes parameters for
-        components that are disabled in this instance.
+        components that are disabled in this instance. Any parameter required by
+        total_model but missing from p_cfg is defaulted to 0 and fixed.
         """
         init = {k: v[0] for k, v in p_cfg.items()}
         fixed = {k: v[1] for k, v in p_cfg.items()}
         limits = {k: v[2] for k, v in p_cfg.items()}
+
+        _fill_missing_params(init, fixed, limits, self._all_param_names)
 
         # Peak 1 components
         if ("cb" not in self.peak1_mode or "cb_exp" in self.peak1_mode) or not self.use_peak1:
@@ -782,7 +817,6 @@ class TriplePeak:
             )
 
         raise ValueError("No valid peak3_mode found.")
-
 
 class AccumulationModel:
     def __init__(self):
