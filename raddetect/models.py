@@ -80,7 +80,8 @@ class SinglePeak:
 
     def _eval_zero(self, x, *args):
         """Catch-all for disabled components; absorbs unused parameters via *args."""
-        return np.zeros_like(x, dtype=float)
+        # return np.zeros_like(x, dtype=float)
+        return 0.0
 
     def _eval_bkg(self, x, bkg):
         return np.full_like(x, bkg, dtype=float)
@@ -294,7 +295,7 @@ class DoublePeak:
 
     def _eval_zero(self, x, *args):
         """Catch-all for disabled components; absorbs extra parameters via *args."""
-        return np.zeros_like(x, dtype=float)
+        return 0.0
 
     def _eval_bkg(self, x, bkg):
         return np.full_like(x, bkg, dtype=float)
@@ -580,7 +581,7 @@ class TriplePeak:
 
     def _eval_zero(self, x, *args):
         """Catch-all for disabled components; absorbs extra parameters via *args."""
-        return np.zeros_like(x, dtype=float)
+        return 0.0
 
     def _eval_bkg(self, x, bkg):
         return np.full_like(x, bkg, dtype=float)
