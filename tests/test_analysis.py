@@ -34,26 +34,32 @@ def test_radon_analysis_get_mca_histogram():
 
 def test_monalpha_initialization():
     # Initialize the class with an actual local test file
-    analysis = MonalphaAnalysis(TEST_DATA_FILE)
+    analysis = MonalphaAnalysis(TEST_DATA_FILE, compute_runtime_from_timestamp=True)
 
     # Assert successful initialization
     assert analysis is not None
+    assert analysis.compute_runtime_from_timestamp is True
+    assert not hasattr(analysis, "energy_calibration")
 
 
 def test_blumchen_initialization():
     # Initialize the class with an actual local test file
-    analysis = BlumchenAnalysis(TEST_DATA_FILE)
+    analysis = BlumchenAnalysis(TEST_DATA_FILE, compute_runtime_from_timestamp=True)
 
     # Assert successful initialization
     assert analysis is not None
+    assert analysis.compute_runtime_from_timestamp is True
+    assert not hasattr(analysis, "energy_calibration")
 
 
 def test_cryoradon_initialization():
     # Initialize the class with an actual local test file
-    analysis = CryoRadonAnalysis(TEST_DATA_FILE)
+    analysis = CryoRadonAnalysis(TEST_DATA_FILE, compute_runtime_from_timestamp=True)
 
     # Assert successful initialization
     assert analysis is not None
+    assert analysis.compute_runtime_from_timestamp is True
+    assert not hasattr(analysis, "energy_calibration")
 
 
 # An alternative it owuld be to use @patch for places a real

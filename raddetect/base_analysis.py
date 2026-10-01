@@ -37,7 +37,6 @@ class RadonAnalysis:
     def __init__(
         self,
         filename,
-        energy_calibration=None,
         compute_runtime_from_timestamp=False,
         timestamp_interval=60,
     ):
@@ -46,24 +45,13 @@ class RadonAnalysis:
 
         Args:
             filename (str): The path or the name the ROOT file.
-            energy_calibration (None or list): The energy calibration parameters.
-            It can be either
-            None or a list [q, m]
-            where q and m are the linear energy calibration parameters.
             compute_runtime_from_timestamp (bool, optional): If True, computes
-            runtime from the timestamp.
-            Defaults to False.
+                runtime from the timestamp. Defaults to False.
             timestamp_interval (int, optional): The list file logging interval
-            in seconds. Defaults to 60.
+                in seconds. Defaults to 60.
         """
-        self.energy_calibration = energy_calibration
         self.compute_runtime_from_timestamp = compute_runtime_from_timestamp
         self.timestamp_interval = timestamp_interval
-        if self.energy_calibration is not None:
-            warnings.warn(
-                "energy_calibration is not None. this will affect the MCA "
-                "range selection. Be careful!"
-            )
 
         self.mca, self.timestamp, self.runtime = self.get_data(filename)
 
@@ -120,9 +108,6 @@ class RadonAnalysis:
         # If a temporary file was used, remove it
         if not os.path.exists(local_path):
             os.remove(tmp_filename)
-
-        if self.energy_calibration is not None:
-            mca = (mca - self.energy_calibration[1]) / self.energy_calibration[0]
 
         return mca, timestamp, runtime
 
@@ -279,25 +264,12 @@ class RadonAnalysis:
         fig, axs = plt.subplots(1, 3, figsize=(18, 5), dpi=150)
         axs = axs.flatten()
 
-        # Plot property that depends on the energy_calibration
-        if self.energy_calibration is not None:
-            label = f"Time evolution in {MCA_range} keV"
-            axs[1].set_ylabel("Energy [keV]")
-            axs[0].set_xlabel("Energy [keV]")
-            _MCA_range = [
-                (self.DEFAULT_MCA_RANGE[0] - self.energy_calibration[1])
-                / self.energy_calibration[0],
-                (self.DEFAULT_MCA_RANGE[1] - self.energy_calibration[1])
-                / self.energy_calibration[0],
-            ]
-        else:
-            label = f"Time evolution in {MCA_range} MCA ch"
-            axs[1].set_ylabel("MCA channel")
-            axs[0].set_xlabel("MCA channel")
-            _MCA_range = self.DEFAULT_MCA_RANGE
+        label = f"Time evolution in {MCA_range} MCA ch"
+        axs[1].set_ylabel("MCA channel")
+        axs[0].set_xlabel("MCA channel")
 
         data, mcas = self.get_mca_histogram(
-            MCA_range=_MCA_range,
+            MCA_range=self.DEFAULT_MCA_RANGE,
             time_range=time_range,
             n_mca=n_mca,
             exclude_time_range=exclude_time_range,
@@ -314,7 +286,7 @@ class RadonAnalysis:
         axs[0].fill_between(mcas, data, step="mid", color="black", alpha=0.3)
         axs[0].axvspan(*MCA_range, color="pink", lw=0, alpha=0.5)
         axs[0].set_yscale("log")
-        axs[0].set_xlim(_MCA_range)
+        axs[0].set_xlim(self.DEFAULT_MCA_RANGE)
         axs[0].set_ylabel("Counts")
         axs[0].grid()
 
@@ -340,7 +312,7 @@ class RadonAnalysis:
 
         axs[1].axhspan(*MCA_range, color="pink", lw=0, alpha=0.5)
         axs[1].set_xlabel("Runtime [minutes]")
-        axs[1].set_ylim(_MCA_range)
+        axs[1].set_ylim(self.DEFAULT_MCA_RANGE)
         axs[1].grid()
 
         # Time evolution error bar plot

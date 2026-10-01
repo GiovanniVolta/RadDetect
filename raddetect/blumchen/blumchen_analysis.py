@@ -26,16 +26,25 @@ class BlumchenAnalysis(RadonAnalysis):
     SELECTED_MCA_RANGE = [910, 1060]
     SELECTED_TIME_RANGE = [240, np.inf]
 
-    def __init__(self, filename, compute_runtime_from_timestamp=False, **kwargs):
-        # Pass required arguments to the parent class
-        # (RadonAnalysis) if needed
-        super().__init__(filename=filename)
-
-        self.compute_runtime_from_timestamp = compute_runtime_from_timestamp
+    def __init__(
+        self,
+        filename,
+        compute_runtime_from_timestamp=False,
+        timestamp_interval=60,
+        **kwargs,
+    ):
+        # Pass required arguments to the parent class (RadonAnalysis)
+        super().__init__(
+            filename=filename,
+            compute_runtime_from_timestamp=compute_runtime_from_timestamp,
+            timestamp_interval=timestamp_interval,
+        )
 
         # Override the class defaults with passed arguments,
         # or fall back to defaults
-        self.DEFAULT_MCA_RANGE = kwargs.get("DEFAULT_MCA_RANGE", self.DEFAULT_MCA_RANGE)
+        self.DEFAULT_MCA_RANGE = kwargs.get(
+            "DEFAULT_MCA_RANGE", self.DEFAULT_MCA_RANGE
+        )
         self.DEFAULT_TIME_RANGE = kwargs.get(
             "DEFAULT_TIME_RANGE", self.DEFAULT_TIME_RANGE
         )
