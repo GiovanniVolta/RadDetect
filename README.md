@@ -2,7 +2,8 @@
 Advanced Spectroscopy and Emanation Analysis for Radon Content Characterization in Diverse Environments
 
 ``raddetect`` is a utility package for Radon content characterization. 
-It is designed to handle `.root` files containing `channel`, `timestamp`, and `runtime` data, which are the result of the Radon Emanation Database's processing of ORTEC MCA list files. These files originate from detectors like Blumchen (an electrostatic radon monitor), Mona (an alpha spectroscopy setup), and CryoRadon (a cryogenic radon emanation monitor). Due to a bug in the ORTEC file creation process, the runtime can be computed from the timestamps, which are set 60 seconds apart by the DAQ during list mode data acquisition.
+
+It is designed to handle `.root` files containing `channel`, `timestamp`, and `runtime` data, which are the result of the Radon Emanation Database's processing of ORTEC MCA list files. These files originate from detectors like Blumchen (an electrostatic radon monitor), Mona (an alpha spectroscopy setup), and CryoRadon (a cryogenic radon emanation monitor). Due to a bug in the ORTEC file creation process, the runtime can be computed from the timestamps, which are set 60 seconds apart by the DAQ during list mode data acquisition. It also provides 1D Radon diffusion modeling (`RadonDiffusion1D`) using the Method of Images for implanted Gaussian profiles to estimate bulk diffusion coefficients from time-evolution rate measurements.
  
 > [!NOTE]
 > If you are not connected to the MPIK network (or VPN), you will not be able to fetch data from the radon database automatically. In this case, you must provide the ROOT files locally to the analysis modules.
@@ -19,10 +20,18 @@ pip install .
 # OR for an editable installation (for development)
 pip install -e .
 ```
+## Package Modules
+
+`raddetect` includes the following subpackages and modules:
+
+- **`blumchen`**: Spectrum fitting and time evolution analysis for the Blumchen electrostatic radon monitor.
+- **`cryoradon`**: Analysis module for CryoRadon cryogenic radon emanation measurements.
+- **`monalpha`**: Alpha spectroscopy analysis and geometric detection efficiency calculations for Mona.
+- **`diffusion`**: 1D Radon diffusion modeling (`RadonDiffusion1D` / `RnDiffusion1D`) solving boundary value problems via the Method of Images for implanted Gaussian initial distributions, computing outgassing fluxes, chamber inventories, expected count rates, and `iminuit` fit helper functionality.- **`models`**: Functor spectral models (`SinglePeak`, `DoublePeak`, `TriplePeak`, `AccumulationModel`, `ExpansionModel`) for MCA fitting.
 
 ## Configuration Parameters
 
-When initializing the function, you can pass additional keyword arguments to override the default MCA and Time ranges. This is useful for different if the MCA and the amplifier change:
+When initializing analysis classes, you can pass additional keyword arguments to override the default MCA and Time ranges:
 
 * `DEFAULT_MCA_RANGE` (list, default `[0, 1300]`): Default range of MCA channels to plot in the full spectrum.
 * `DEFAULT_TIME_RANGE` (list, default `[0, np.inf]`): Default time range in minutes.
